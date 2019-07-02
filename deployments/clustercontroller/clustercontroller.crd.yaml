@@ -1,0 +1,81 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+  name: clusters.ote.baidu.com
+spec:
+  group: ote.baidu.com
+  names:
+    kind: Cluster
+    plural: clusters
+    shortNames:
+    - cs
+    singular: cluster
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        spec:
+          properties:
+            name:
+              type: string
+  version: v1
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+  name: clustercontrollers.ote.baidu.com
+spec:
+  group: ote.baidu.com
+  names:
+    kind: ClusterController
+    plural: clustercontrollers
+    shortNames:
+    - ccs
+    singular: clustercontroller
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        spec:
+          properties:
+            clusterSelector:
+              type: string
+            destination:
+              type: string
+            url:
+              type: string
+            body:
+              type: string
+  version: v1
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: ote-crd
+rules:
+- apiGroups:
+  - ote.baidu.com
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+- apiGroups:
+  - ote.baidu.com
+  resources:
+  - clusters
+  - clustercontrollers
+  verbs:
+  - list
+  - get
+  - update
+  - watch
+  - create
+  - delete
+

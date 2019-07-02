@@ -1,0 +1,8 @@
+language: go
+
+go:
+- "1.12"
+
+install: true
+
+script: bash build/build.sh build && bash build/build.sh test

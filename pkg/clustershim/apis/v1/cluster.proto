@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package cluster;
+
+// ClusterShimService is the service that handles the requests from clustercontroller.
+service ClusterShimService {
+    // Do transmits the request to target server.
+    rpc Do(ShimRequest) returns(ShimResponse) {}
+}
+
+// ShimRequest is a request to transmit to target server.
+message ShimRequest {
+	// ParentClusterName is the name of parent cluster.
+	string ParentClusterName = 1;
+	// Destination is the target server name.
+	string Destination = 2;
+	// Method is the method need to be performed by target server.
+	string Method = 3;
+	// URL is the request URL.
+	string URL = 4;
+	// Body is the request body.
+	string Body = 5;
+}
+
+// ShimResponse is a response containing result from target server.
+message ShimResponse {
+	// Timestamp is the timestamp of response.
+	int64 Timestamp = 1;
+    // StatusCode is the status code of response.
+	int32 StatusCode = 2;
+	// Body is the response body.
+	string Body = 3;
+}
