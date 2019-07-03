@@ -1,6 +1,8 @@
 # OTE-Stack
 
 [![Build Status](https://travis-ci.org/baidu/ote-stack.svg?branch=master)](https://travis-ci.org/baidu/ote-stack)
+[![Go Report Card](https://goreportcard.com/badge/github.com/baidu/ote-stack)](https://goreportcard.com/report/github.com/baidu/ote-stack)
+[![GoDoc](https://godoc.org/github.com/baidu/ote-stack?status.svg)](https://godoc.org/github.com/baidu/ote-stack)
 
 OTE-Stack is an edge computing platform for 5G and AI. By virtualization it can shield heterogeneous characteristics and gives a unified access of cloud edge, mobile edge and private edge. For AI it provides low-latency, high-reliability and cost-optimal computing support at the edge through the cluster management and intelligent scheduling of multi-tier clusters. And at the same time OTE-Stack makes device-edge-cloud collaborative computing possible.
 
