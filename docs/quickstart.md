@@ -14,6 +14,7 @@ git clone https://github.com/baidu/ote-stack
 If your go version is equal to or greater than 1.12, we recommend that you use the build.sh to compile.
 
 ```shell
+// compile (compiled binary programs in the output/bin directory)
 bash build/build.sh build
 ```
 
@@ -25,7 +26,7 @@ go get github.com/gorilla/mux
 
 export GO111MODULE=off
 
-// compile (compiled binary is in their own directory)
+// compile (compiled binary programs in their own directory)
 cd $GOPATH/src/github.com/baidu/ote-stack/cmd/clustercontroller && go build clustercontroller.go
 cd $GOPATH/src/github.com/baidu/ote-stack/cmd/k8s_cluster_shim && go build k8s_cluster_shim.go
 cd $GOPATH/src/github.com/baidu/ote-stack/cmd/k3s_cluster_shim && go build k3s_cluster_shim.go
