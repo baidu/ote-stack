@@ -50,6 +50,10 @@ func (f *fakeEdgeTunnel) RegistReceiveMessageHandler(tunnel.TunnelReadMessageFun
 	return
 }
 
+func (f *fakeEdgeTunnel) RegistAfterConnectToHook(tunnel.AfterConnectToHook) {
+	return
+}
+
 func (f *fakeEdgeTunnel) Start() error {
 	return nil
 }
@@ -83,19 +87,21 @@ func TestValid(t *testing.T) {
 		{
 			Name: "edgehandler with k8sclient",
 			Conf: &config.ClusterControllerConfig{
-				ClusterName:    "child",
-				K8sClient:      &oteclient.Clientset{},
-				RemoteShimAddr: "",
-				ParentCluster:  "127.0.0.1:8287",
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             &oteclient.Clientset{},
+				RemoteShimAddr:        "",
+				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
 		{
 			Name: "edgehandler with remoteshim",
 			Conf: &config.ClusterControllerConfig{
-				ClusterName:    "child",
-				K8sClient:      nil,
-				RemoteShimAddr: "/var/run/shim.sock",
-				ParentCluster:  "127.0.0.1:8287",
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             nil,
+				RemoteShimAddr:        "/var/run/shim.sock",
+				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
 	}

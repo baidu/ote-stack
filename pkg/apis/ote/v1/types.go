@@ -37,6 +37,7 @@ const (
 	CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER   = "regist"   // cluster regist
 	CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER = "unregist" // cluster unregist
 	CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE    = "route"    // cluster route
+	CLUSTER_CONTROLLER_DEST_CLUSTER_SUBTREE  = "subtree"  // cluster subtree
 )
 
 // CLUSTER_NAMESPACE defines the namespace of k8s crd must be in.
@@ -95,8 +96,9 @@ type Cluster struct {
 }
 
 type ClusterSpec struct {
-	Name   string `json:"name"`
-	Listen string `json:"listen"`
+	Name       string `json:"name"`
+	Listen     string `json:"listen"`
+	ParentName string `json:"parentName"`
 	// Childs describes the relation of cluster name to its websocket listen address.
 	Childs map[string]string `json:"childs"`
 }

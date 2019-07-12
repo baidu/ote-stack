@@ -79,7 +79,7 @@ func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error
 // valid check if config of cluster handler is valid, return error if it is invalid.
 // call before Start.
 func (c *clusterHandler) valid() error {
-	if c.conf.ClusterName == "" {
+	if c.conf.ClusterUserDefineName == "" {
 		return fmt.Errorf("cluster name of cluster controller cannot be empty, set by --cluster-name")
 	}
 	if c.conf.ParentCluster == "" && !c.isRoot() {
@@ -185,14 +185,14 @@ func selectChild(cc *otev1.ClusterController) map[string]*otev1.ClusterControlle
 	subtreeClusters := clusterrouter.Router().SubTreeClusters()
 	var selectedSubTreeClusters []string
 	ret := make(map[string]*otev1.ClusterController)
-	for _, subtreeCluster := range *subtreeClusters {
+	for _, subtreeCluster := range subtreeClusters {
 		if selector.Has(subtreeCluster) {
 			selectedSubTreeClusters = append(selectedSubTreeClusters, subtreeCluster)
 		}
 	}
 	// get out ports of selected subtree clusters
 	portsToSubtreeClusters := clusterrouter.Router().PortsToSubtreeClusters(&selectedSubTreeClusters)
-	for port, subtree := range *portsToSubtreeClusters {
+	for port, subtree := range portsToSubtreeClusters {
 		portCC := cc.DeepCopy()
 		portCC.Spec.ClusterSelector = clusterselector.ClustersToSelector(&subtree)
 		ret[port] = portCC
@@ -271,23 +271,14 @@ checkClusterName runs before stablish a connection to a child.
 regist to cloud tunnel before Start it.
 */
 func (c *clusterHandler) checkClusterName(cr *config.ClusterRegistry) bool {
-	cl := otev1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name,
-			Namespace: otev1.CLUSTER_NAMESPACE,
-		},
-		Spec: otev1.ClusterSpec{
-			Name:   cr.Name,
-			Listen: cr.Listen,
-		},
-		Status: otev1.ClusterStatus{
-			Status:    otev1.CLUSTER_STATUS_REGIST,
-			Timestamp: time.Now().Unix(),
-		},
+	if cr == nil {
+		return false
 	}
-	cc, err := cl.WrapperToClusterController(otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER)
+
+	cr.ParentName = c.conf.ClusterName
+	cc, err := cr.WrapperToClusterController(otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER)
 	if err != nil {
-		klog.Errorf("%v", err)
+		klog.Errorf("wrapper message for regist child failed: %v", err)
 		return false
 	}
 
@@ -328,6 +319,15 @@ func (c *clusterHandler) handleMessageFromChild(client string, msg []byte) (ret 
 		ret = c.handleRegistClusterMessage(client, cc)
 	} else if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER {
 		ret = c.handleUnregistClusterMessage(client, cc)
+	} else if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_SUBTREE {
+		if clusterrouter.Router().HasChild(cc.Spec.ParentClusterName) {
+			// if this is a subtree message and myself is grandparent of the cluster
+			// check router to subtree
+			c.updateRouteToSubtree(cc, false)
+		} else if clusterrouter.Router().HasChild(cc.ObjectMeta.Name) {
+			c.updateRouteToSubtree(cc, true)
+			c.transmitToParent(cc)
+		}
 	} else if cc.Spec.ParentClusterName == c.conf.ClusterName {
 		ret = c.mergeToApiserver(cc)
 	} else {
@@ -341,7 +341,7 @@ func (c *clusterHandler) handleMessageFromChild(client string, msg []byte) (ret 
 isRoot checks whether a cluster is root.
 */
 func (c *clusterHandler) isRoot() bool {
-	return config.IsRoot(c.conf.ClusterName)
+	return config.IsRoot(c.conf.ClusterUserDefineName)
 }
 
 /*
@@ -354,18 +354,31 @@ once get a regist message, a cluster should do things below:
 func (c *clusterHandler) handleRegistClusterMessage(
 	client string, cc *otev1.ClusterController) (ret error) {
 	ret = nil
-	cluster := getClusterFromClusterController(cc)
+	cr := getClusterRegistryFromClusterController(cc)
+	if cr == nil {
+		ret = fmt.Errorf("regist message cannot get cluster info")
+		klog.Error(ret)
+		return
+	}
+	cluster := getClusterFromClusterRegistry(cr)
 	if cluster == nil {
 		ret = fmt.Errorf("regist message cannot get cluster info")
 		klog.Error(ret)
 		return
 	}
 
-	clusterrouter.Router().AddRoute(cluster.Spec.Name, client)
+	clusterrouter.Router().AddRoute(cr.Name, client)
 
 	if c.isRoot() {
 		// TODO handle rename situation
-		c.clusterCRD.Create(cluster)
+		old := c.clusterCRD.Get(cluster.ObjectMeta.Namespace, cluster.ObjectMeta.Name)
+		if old == nil {
+			c.clusterCRD.Create(cluster)
+		} else {
+			// there is may be a duplicated-name cluster
+			// drop the new one
+			// TODO make the new one reconnect
+		}
 	} else {
 		c.transmitToParent(cc)
 	}
@@ -379,33 +392,23 @@ closeChild runs when a child disconnect to this cluster.
 2. if this is a root, remove cluster from etcd,
 3. delete child from route and update route to other childs.
 */
-func (c *clusterHandler) closeChild(clusterName string) {
+func (c *clusterHandler) closeChild(cr *config.ClusterRegistry) {
+	if cr == nil {
+		return
+	}
+
+	cr.ParentName = c.conf.ClusterName
 	// delete child from route
-	clusterrouter.Router().DelChild(clusterName, c.sendToChild)
+	clusterrouter.Router().DelChild(cr.Name, c.sendToChild)
 
 	// if this is root, delete cluster from etcd
 	// otherwise, report unregist to root
-	cl := otev1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
-			Namespace: otev1.CLUSTER_NAMESPACE,
-		},
-		Spec: otev1.ClusterSpec{
-			Name: clusterName,
-		},
-	}
-	cbyte, err := cl.Serialize()
+	cc, err := cr.WrapperToClusterController(otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER)
 	if err != nil {
-		klog.Errorf("serialize cluster crd(%v) failed: %v", cl, err)
+		klog.Errorf("wrapper message for close child failed: %v", err)
 		return
 	}
-	cc := otev1.ClusterController{
-		Spec: otev1.ClusterControllerSpec{
-			Destination: otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER,
-			Body:        string(cbyte),
-		},
-	}
-	go c.handleUnregistClusterMessage(clusterName, &cc)
+	go c.handleUnregistClusterMessage(cr.Name, cc)
 }
 
 /*
@@ -417,14 +420,20 @@ otherwise, transmit to parent,
 func (c *clusterHandler) handleUnregistClusterMessage(
 	client string, cc *otev1.ClusterController) (ret error) {
 	ret = nil
-	cluster := getClusterFromClusterController(cc)
+	cr := getClusterRegistryFromClusterController(cc)
+	if cr == nil {
+		ret = fmt.Errorf("unregist message cannot get cluster info")
+		klog.Error(ret)
+		return
+	}
+	cluster := getClusterFromClusterRegistry(cr)
 	if cluster == nil {
 		ret = fmt.Errorf("unregist message cannot get cluster info")
 		klog.Error(ret)
 		return
 	}
 
-	clusterrouter.Router().DelRoute(cluster.Spec.Name, client)
+	clusterrouter.Router().DelRoute(cluster.ObjectMeta.Name, client)
 
 	if c.isRoot() {
 		c.clusterCRD.Delete(cluster)
@@ -483,4 +492,54 @@ func getClusterFromClusterController(cc *otev1.ClusterController) *otev1.Cluster
 		return nil
 	}
 	return cluster
+}
+
+func getClusterRegistryFromClusterController(cc *otev1.ClusterController) *config.ClusterRegistry {
+	cr, err := config.ClusterRegistryDeserialize([]byte(cc.Spec.Body))
+	if err != nil {
+		klog.Errorf("deserialize clusterregistry(%s) failed: %v", cc.Spec.Body, err)
+		return nil
+	}
+	return cr
+}
+
+func getClusterFromClusterRegistry(cr *config.ClusterRegistry) *otev1.Cluster {
+	if cr == nil {
+		return nil
+	}
+	return &otev1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name,
+			Namespace: otev1.CLUSTER_NAMESPACE,
+		},
+		Spec: otev1.ClusterSpec{
+			Name:       cr.UserDefineName,
+			Listen:     cr.Listen,
+			ParentName: cr.ParentName,
+		},
+		Status: otev1.ClusterStatus{
+			Timestamp: cr.Time,
+		},
+	}
+}
+
+// updateRouteToSubtree updates router to subtree of child or grandchild.
+// childOrGrandChild is true if it is child, false if it is grandchild
+func (c *clusterHandler) updateRouteToSubtree(
+	cc *otev1.ClusterController, childOrGrandChild bool) {
+	subtrees := clusterrouter.SubtreeFromClusterController(cc)
+	if subtrees == nil {
+		return
+	}
+	var err error
+	for to, _ := range subtrees {
+		if childOrGrandChild {
+			err = clusterrouter.Router().AddRoute(to, cc.ObjectMeta.Name)
+		} else {
+			err = clusterrouter.Router().AddRoute(to, cc.Spec.ParentClusterName)
+		}
+		if err != nil {
+			klog.Errorf("add subtree router %s-%s failed: %v", to, cc.Spec.ParentClusterName, err)
+		}
+	}
 }

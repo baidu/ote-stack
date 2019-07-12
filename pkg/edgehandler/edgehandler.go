@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	clusterrouter "github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/clusterselector"
 	"github.com/baidu/ote-stack/pkg/config"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -50,7 +51,7 @@ func NewEdgeHandler(c *config.ClusterControllerConfig) EdgeHandler {
 }
 
 func (e *edgeHandler) valid() error {
-	if e.conf.ClusterName == "" {
+	if e.conf.ClusterUserDefineName == "" {
 		return fmt.Errorf("cluster name is empty")
 	}
 	if e.conf.K8sClient == nil && !e.isRemoteShim() {
@@ -63,7 +64,7 @@ func (e *edgeHandler) valid() error {
 }
 
 func (e *edgeHandler) isRoot() bool {
-	return config.IsRoot(e.conf.ClusterName)
+	return config.IsRoot(e.conf.ClusterUserDefineName)
 }
 
 func (e *edgeHandler) isRemoteShim() bool {
@@ -94,6 +95,7 @@ func (e *edgeHandler) Start() error {
 
 	e.edgeTunnel = tunnel.NewEdgeTunnel(e.conf)
 	e.edgeTunnel.RegistReceiveMessageHandler(e.receiveMessageFromTunnel)
+	e.edgeTunnel.RegistAfterConnectToHook(e.afterConnect)
 	if err := e.edgeTunnel.Start(); err != nil {
 		return err
 	}
@@ -168,11 +170,31 @@ func (e *edgeHandler) handleMessage(c *otev1.ClusterController) error {
 	c.Status[e.conf.ClusterName] = *status
 
 	// send to cloudtunnel.
-	data, err := c.Serialize()
+	err = e.sendToParent(c)
+
+	return err
+}
+
+func (e *edgeHandler) afterConnect() {
+	e.reportSubTree()
+}
+
+func (e *edgeHandler) reportSubTree() {
+	cc := clusterrouter.Router().SubTreeMessage()
+	if cc == nil {
+		return
+	}
+	cc.ObjectMeta.Name = e.conf.ClusterName
+	e.sendToParent(cc)
+}
+
+func (e *edgeHandler) sendToParent(cc *otev1.ClusterController) error {
+	data, err := cc.Serialize()
 	if err != nil {
 		klog.Errorf("marshal ClusterController error: %s", err.Error())
 		return err
 	}
+
 	go e.edgeTunnel.Send(data)
 
 	return nil

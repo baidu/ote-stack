@@ -19,6 +19,9 @@ limitations under the License.
 package config
 
 import (
+	"encoding/json"
+	"fmt"
+
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 )
@@ -31,28 +34,69 @@ const (
 	// For edge when connect to parent, set this header to address listend by the cluster,
 	// so let parent know the address of child, thus a cluster can get its neighbor from parent.
 	CLUSTER_CONNECT_HEADER_LISTEN_ADDR = "listen-addr"
+	// CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME is the user-define name of the child
+	CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME = "name"
 
 	// K8S_INFORMAER_SYNC_DURATION defines k8s informer sync seconds.
 	K8S_INFORMAER_SYNC_DURATION = 10
 )
 
+var (
+	DUPLICATED_NAME_ERROR = fmt.Errorf("cluster name duplicated")
+)
+
 // ClusterControllerConfig contains config needed by cluster controller.
 type ClusterControllerConfig struct {
-	TunnelListenAddr  string
-	ParentCluster     string
-	ClusterName       string
-	KubeConfig        string
-	HelmTillerAddr    string
-	RemoteShimAddr    string
-	K8sClient         oteclient.Interface
-	EdgeToClusterChan chan otev1.ClusterController
-	ClusterToEdgeChan chan otev1.ClusterController
+	TunnelListenAddr      string
+	ParentCluster         string
+	ClusterName           string
+	ClusterUserDefineName string
+	KubeConfig            string
+	HelmTillerAddr        string
+	RemoteShimAddr        string
+	K8sClient             oteclient.Interface
+	EdgeToClusterChan     chan otev1.ClusterController
+	ClusterToEdgeChan     chan otev1.ClusterController
 }
 
 // ClusterRegistry defines a data structure to use when a cluster regists.
 type ClusterRegistry struct {
-	Name   string
-	Listen string
+	Name           string // uuid
+	UserDefineName string
+	Listen         string
+	Time           int64
+	ParentName     string
+}
+
+func (cr *ClusterRegistry) Serialize() ([]byte, error) {
+	b, err := json.Marshal(cr)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func ClusterRegistryDeserialize(b []byte) (*ClusterRegistry, error) {
+	cr := ClusterRegistry{}
+	err := json.Unmarshal(b, &cr)
+	if err != nil {
+		return nil, err
+	}
+	return &cr, nil
+}
+
+func (cr *ClusterRegistry) WrapperToClusterController(dst string) (*otev1.ClusterController, error) {
+	cbyte, err := cr.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("serialize clusterregistry(%v) failed: %v", cr, err)
+	}
+	cc := otev1.ClusterController{
+		Spec: otev1.ClusterControllerSpec{
+			Destination: dst,
+			Body:        string(cbyte),
+		},
+	}
+	return &cc, nil
 }
 
 // IsRoot check if clusterName is a root cluster.

@@ -97,14 +97,15 @@ func Run() error {
 	clusterToEdgeChan := make(chan otev1.ClusterController)
 	// make config for cluster controller.
 	clusterConfig := &config.ClusterControllerConfig{
-		TunnelListenAddr:  tunnelListenAddr,
-		ParentCluster:     parentCluster,
-		ClusterName:       clusterName,
-		K8sClient:         k8sClient,
-		HelmTillerAddr:    helmTillerAddr,
-		RemoteShimAddr:    remoteShimAddr,
-		EdgeToClusterChan: edgeToClusterChan,
-		ClusterToEdgeChan: clusterToEdgeChan,
+		TunnelListenAddr:      tunnelListenAddr,
+		ParentCluster:         parentCluster,
+		ClusterName:           clusterName,
+		ClusterUserDefineName: clusterName,
+		K8sClient:             k8sClient,
+		HelmTillerAddr:        helmTillerAddr,
+		RemoteShimAddr:        remoteShimAddr,
+		EdgeToClusterChan:     edgeToClusterChan,
+		ClusterToEdgeChan:     clusterToEdgeChan,
 	}
 
 	// start edge/cluster handler.
