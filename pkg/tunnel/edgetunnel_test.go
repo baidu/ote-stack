@@ -23,13 +23,16 @@ import (
 	"time"
 
 	clusterrouter "github.com/baidu/ote-stack/pkg/clusterrouter"
+	"github.com/baidu/ote-stack/pkg/config"
 )
 
 func newTestEdgeTunnel() *edgeTunnel {
 	return &edgeTunnel{
-		name:       "child",
-		cloudAddr:  testServer.Listener.Addr().String(),
-		listenAddr: ":8287",
+		name:               "child",
+		cloudAddr:          testServer.Listener.Addr().String(),
+		listenAddr:         ":8287",
+		conf:               &config.ClusterControllerConfig{},
+		afterConnectToHook: func() {},
 	}
 }
 func TestConnect(t *testing.T) {

@@ -42,11 +42,11 @@ func TestInit(t *testing.T) {
 		conf:      c,
 		k8sEnable: false,
 	}
-	h.conf.ClusterName = ""
+	h.conf.ClusterUserDefineName = ""
 	assert.Error(t, h.valid())
 
 	// test root cluster config
-	h.conf.ClusterName = config.ROOT_CLUSTER_NAME
+	h.conf.ClusterUserDefineName = config.ROOT_CLUSTER_NAME
 	assert.Error(t, h.valid())
 	h.conf.TunnelListenAddr = ":8272"
 	assert.Error(t, h.valid())
@@ -58,7 +58,7 @@ func TestInit(t *testing.T) {
 	assert.Error(t, h.valid())
 
 	// test no-root cluster config
-	h.conf.ClusterName = "c1"
+	h.conf.ClusterUserDefineName = "c1"
 	h.conf.ParentCluster = ""
 	assert.Error(t, h.valid())
 	h.conf.ParentCluster = "parent"
@@ -150,11 +150,11 @@ func TestStart(t *testing.T) {
 	fakeTunn.reset()
 	c := &clusterHandler{
 		conf: &config.ClusterControllerConfig{
-			TunnelListenAddr:  "fake",
-			K8sClient:         fakeK8sClient,
-			EdgeToClusterChan: make(chan otev1.ClusterController),
-			ClusterToEdgeChan: make(chan otev1.ClusterController),
-			ClusterName:       config.ROOT_CLUSTER_NAME,
+			TunnelListenAddr:      "fake",
+			K8sClient:             fakeK8sClient,
+			EdgeToClusterChan:     make(chan otev1.ClusterController),
+			ClusterToEdgeChan:     make(chan otev1.ClusterController),
+			ClusterUserDefineName: config.ROOT_CLUSTER_NAME,
 		},
 		tunn:      fakeTunn,
 		k8sEnable: false,
@@ -216,14 +216,14 @@ func TestHandleMessageFromChild(t *testing.T) {
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.NotNil(t, err)
 	// resp from child with no namespace and name
-	cc.Spec.ParentClusterName = c.conf.ClusterName
+	cc.Spec.ParentClusterName = c.conf.ClusterUserDefineName
 	cc.Spec.Destination = otev1.CLUSTER_CONTROLLER_DEST_API
 	ccbytes, err = cc.Serialize()
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.Nil(t, err)
 	// resp from child transmit to parent
-	cc.Spec.ParentClusterName = c.conf.ClusterName + "1"
+	cc.Spec.ParentClusterName = c.conf.ClusterUserDefineName + "1"
 	ccbytes, err = cc.Serialize()
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
@@ -281,9 +281,9 @@ func (f *fakeCloudTunnel) RegistClientCloseHandler(fn tunnel.ClientCloseHandleFu
 func newFakeRootClusterHandler(t *testing.T) *clusterHandler {
 	ret := &clusterHandler{
 		conf: &config.ClusterControllerConfig{
-			ClusterName:      config.ROOT_CLUSTER_NAME,
-			TunnelListenAddr: "8272",
-			K8sClient:        oteclient.NewSimpleClientset(),
+			ClusterUserDefineName: config.ROOT_CLUSTER_NAME,
+			TunnelListenAddr:      "8272",
+			K8sClient:             oteclient.NewSimpleClientset(),
 		},
 		tunn:      fakeTunn,
 		k8sEnable: false,
@@ -297,10 +297,10 @@ func newFakeRootClusterHandler(t *testing.T) *clusterHandler {
 func newFakeNoRootClusterHandler(t *testing.T) *clusterHandler {
 	ret := &clusterHandler{
 		conf: &config.ClusterControllerConfig{
-			ClusterName:      "c1",
-			TunnelListenAddr: "8273",
-			K8sClient:        oteclient.NewSimpleClientset(),
-			ParentCluster:    "8272",
+			ClusterUserDefineName: "c1",
+			TunnelListenAddr:      "8273",
+			K8sClient:             oteclient.NewSimpleClientset(),
+			ParentCluster:         "8272",
 		},
 		tunn:      fakeTunn,
 		k8sEnable: false,

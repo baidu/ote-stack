@@ -46,7 +46,7 @@ func TestChildAndNeighbor(t *testing.T) {
 	}
 	assert.NotContains(t, defaultClusterRouter.Neighbor, "c2")
 
-	parentRouteMsg := parentR.RouterMessage()
+	parentRouteMsg := parentR.NeighborRouterMessage()
 	calledNotifier = false
 	assert.False(t, calledNotifier)
 	UpdateRouter(parentRouteMsg, testRouterNotifier)
@@ -69,32 +69,23 @@ route in test:
 root
 	- c1
 		- cn
-			- c2
 		- cm
-			- c2
 	- c3
 		- c2
 */
 func TestRoute(t *testing.T) {
 	r := Router()
 
-	r.AddRoute("c1", "c1")
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c1"]["c1"])
+	err := r.AddRoute("c1", "c1")
+	assert.Nil(t, err)
+	assert.Equal(t, "c1", defaultClusterRouter.subtreeRouter["c1"])
 
-	r.AddRoute("c2", "c1")
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c2"]["c1"])
-	r.AddRoute("c2", "c1")
-	assert.Equal(t, 2, defaultClusterRouter.subtreeRouter["c2"]["c1"])
+	err = r.AddRoute("c2", "c1")
+	assert.Nil(t, err)
+	assert.Equal(t, "c1", defaultClusterRouter.subtreeRouter["c2"])
 
-	r.AddRoute("c2", "c3")
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c2"]["c3"])
-
-	r.DelRoute("c2", "c3")
-	assert.Contains(t, defaultClusterRouter.subtreeRouter, "c2")
-	assert.NotContains(t, defaultClusterRouter.subtreeRouter["c2"], "c3")
-
-	r.DelRoute("c2", "c1")
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c2"]["c1"])
+	err = r.AddRoute("c2", "c3")
+	assert.NotNil(t, err)
 
 	r.DelRoute("c2", "c1")
 	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c2")
@@ -103,33 +94,20 @@ func TestRoute(t *testing.T) {
 	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c1")
 
 	r.AddRoute("c1", "c1")
-	r.AddRoute("c2", "c1")
-	r.AddRoute("c2", "c1")
 	r.AddRoute("c2", "c3")
 	r.AddRoute("c3", "c3")
 	r.AddRoute("cn", "c1")
 	r.AddRoute("cm", "c1")
-	assert.Equal(t, 2, defaultClusterRouter.subtreeRouter["c2"]["c1"])
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c2"]["c3"])
 	assert.EqualValues(t,
 		map[string][]string{
-			"c1": []string{"c2", "cn"},
+			"c1": []string{"cn"},
 			"c3": []string{"c2"},
 		},
-		*r.PortsToSubtreeClusters(&[]string{"c2", "cn"}),
+		r.PortsToSubtreeClusters(&[]string{"c2", "cn"}),
 	)
 	assert.ElementsMatch(t,
 		[]string{"c1", "c2", "c3", "cn", "cm"},
-		*r.SubTreeClusters())
-
-	r.DelRoute("c1", "c1")
-	assert.NotContains(t, defaultClusterRouter.subtreeRouter["c2"], "c1")
-	assert.NotContains(t, defaultClusterRouter.subtreeRouter["cn"], "c1")
-	assert.NotContains(t, defaultClusterRouter.subtreeRouter["cm"], "c1")
-	assert.Equal(t, 1, defaultClusterRouter.subtreeRouter["c2"]["c3"])
-
-	r.DelRoute("c3", "c3")
-	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c2")
+		r.SubTreeClusters())
 }
 
 func testRouterNotifier(cc *otev1.ClusterController, tos ...string) {

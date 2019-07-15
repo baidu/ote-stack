@@ -33,7 +33,7 @@ const (
 
 // WSClient is a websocket client.
 type WSClient struct {
-	// Name defines client name.
+	// Name defines uuid of the client.
 	Name string
 	// Conn defines websocket connection.
 	Conn  *websocket.Conn
@@ -49,10 +49,13 @@ type ClusterNameChecker func(*config.ClusterRegistry) bool
 type TunnelReadMessageFunc func(string, []byte) error
 
 // ClientCloseHandleFunc is a function to handle wsclient close event.
-type ClientCloseHandleFunc func(string)
+type ClientCloseHandleFunc func(*config.ClusterRegistry)
 
 // AfterConnectHook is a function to handle wsclient connection event.
 type AfterConnectHook func(*config.ClusterRegistry)
+
+// AfterConnectToHook is a function of edge tunnel to call after connection established.
+type AfterConnectToHook func()
 
 // NewWSClient returns a websocket client.
 func NewWSClient(name string, conn *websocket.Conn) *WSClient {

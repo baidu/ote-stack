@@ -60,3 +60,10 @@ func (c *ClusterCRD) Delete(cluster *otev1.Cluster) {
 		klog.Errorf("delete cluster(%v) failed: %v", cluster, err)
 	}
 }
+
+func (c *ClusterCRD) Update(cluster *otev1.Cluster) {
+	_, err := c.client.OteV1().Clusters(cluster.ObjectMeta.Namespace).Update(cluster)
+	if err != nil {
+		klog.Errorf("update cluster(%v) failed: %v", cluster, err)
+	}
+}

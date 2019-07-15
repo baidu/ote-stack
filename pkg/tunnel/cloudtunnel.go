@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -71,7 +72,7 @@ func NewCloudTunnel(address string) CloudTunnel {
 	tunnel := &cloudTunnel{
 		address:            address,
 		clusterNameCheck:   defaultClusterNameChecker,
-		notifyClientClosed: func(string) { return },
+		notifyClientClosed: func(*config.ClusterRegistry) { return },
 		afterConnectHook:   defaultAfterConnectHook,
 	}
 
@@ -150,7 +151,8 @@ func (t *cloudTunnel) connect(cr *config.ClusterRegistry, conn *websocket.Conn) 
 
 	// notify client closed.
 	klog.Infof("cluster %s is disconnected", cr.Name)
-	go t.notifyClientClosed(cr.Name)
+	cr.Time = time.Now().Unix()
+	go t.notifyClientClosed(cr)
 
 	// close websocket.
 	wsclient.Close()
@@ -160,13 +162,6 @@ func (t *cloudTunnel) connect(cr *config.ClusterRegistry, conn *websocket.Conn) 
 func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 	cluster := mux.Vars(r)[accessURIParam]
 
-	_, ok := t.clients.Load(cluster)
-	if ok {
-		klog.V(1).Infof("cluster %s is already connected", cluster)
-		http.Error(w, "already build connection", http.StatusForbidden)
-		return
-	}
-
 	// get cluster listen addr from header.
 	// TODO if listen addr is duplicated, refuse to connect.
 	listenAddr := r.Header.Get(config.CLUSTER_CONNECT_HEADER_LISTEN_ADDR)
@@ -175,14 +170,30 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "listenAddr is not specified, should set in header", http.StatusBadRequest)
 		return
 	}
+	// get name of the child
+	name := r.Header.Get(config.CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME)
+	if name == "" {
+		klog.V(1).Infof("cluster %s user-define name is not specified, should set in header", cluster)
+		http.Error(w, "user-define name is not specified, should set in header", http.StatusBadRequest)
+		return
+	}
+
+	_, ok := t.clients.Load(cluster)
+	if ok {
+		klog.V(1).Infof("cluster %s is already connected", cluster)
+		http.Error(w, "already build connection", http.StatusForbidden)
+		return
+	}
 
 	cr := config.ClusterRegistry{
-		Name:   cluster,
-		Listen: listenAddr,
+		Name:           cluster,
+		UserDefineName: name,
+		Listen:         listenAddr,
+		Time:           time.Now().Unix(),
 	}
 
 	if !t.clusterNameCheck(&cr) {
-		klog.V(1).Infof("cluster %s has been registered", cr.Name)
+		klog.V(1).Infof("cluster %s has been registered", cluster)
 		http.Error(w, "cluster name has been registered", http.StatusForbidden)
 		return
 	}
