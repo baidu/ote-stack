@@ -68,7 +68,7 @@ func NewClusterControllerCommand() *cobra.Command {
 
 	cmd.AddCommand(versionCmd)
 	cmd.PersistentFlags().StringVarP(&parentCluster, "parent-cluster", "p", "", "Cloud tunnel of parent cluster, e.g., 192.168.0.2:8287")
-	cmd.PersistentFlags().StringVarP(&clusterName, "cluster-name", "n", config.ROOT_CLUSTER_NAME, "Current cluster name, must be unique")
+	cmd.PersistentFlags().StringVarP(&clusterName, "cluster-name", "n", config.RootClusterName, "Current cluster name, must be unique")
 	cmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "k", "/root/.kube/config", "KubeConfig file path")
 	cmd.PersistentFlags().StringVarP(&tunnelListenAddr, "tunnel-listen", "l", ":8287", "Cloud tunnel listen address, e.g., 192.168.0.3:8287")
 	cmd.PersistentFlags().StringVarP(&remoteShimAddr, "remote-shim-endpoint", "r", "", "remote cluster shim unix sock address, e.g., unix://clustercontroller.sock")

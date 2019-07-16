@@ -13,12 +13,27 @@ spec:
     - cs
     singular: cluster
   scope: Namespaced
+  additionalPrinterColumns:
+    - name: Listen
+      type: string
+      JSONPath: .spec.listen
+    - name: Parent
+      type: string
+      JSONPath: .spec.parentName
+    - name: UserDefineName
+      type: string
+      JSONPath: .spec.name
+    - name: Age
+      type: date
+      JSONPath: .metadata.creationTimestamp
   validation:
     openAPIV3Schema:
       properties:
         spec:
           properties:
             name:
+              type: string
+            listen:
               type: string
   version: v1
 

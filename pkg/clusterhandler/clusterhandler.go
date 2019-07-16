@@ -133,8 +133,8 @@ func (c *clusterHandler) Start() error {
 	// watch k8s apiserver for clustercontroller crd if k8s is enable
 	if c.k8sEnable {
 		factory := oteinformer.NewSharedInformerFactoryWithOptions(c.conf.K8sClient,
-			config.K8S_INFORMAER_SYNC_DURATION*time.Second,
-			oteinformer.WithNamespace(otev1.CLUSTER_NAMESPACE))
+			config.K8sInformerSyncDuration*time.Second,
+			oteinformer.WithNamespace(otev1.ClusterNamespace))
 		informer := factory.Ote().V1().ClusterControllers().Informer()
 		// actually, gracefull stop is not supported
 		stopper := make(chan struct{})
@@ -250,7 +250,7 @@ func (c *clusterHandler) handleMessageFromParent() {
 		cc := <-c.conf.EdgeToClusterChan
 		// if it is a route message from parent, update route
 		// otherwise, send to child
-		if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE {
+		if cc.Spec.Destination == otev1.ClusterControllerDestClusterRoute {
 			clusterrouter.UpdateRouter(&cc, c.sendToChild)
 		} else {
 			// directed broadcast by cluster selector
@@ -276,7 +276,7 @@ func (c *clusterHandler) checkClusterName(cr *config.ClusterRegistry) bool {
 	}
 
 	cr.ParentName = c.conf.ClusterName
-	cc, err := cr.WrapperToClusterController(otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER)
+	cc, err := cr.WrapperToClusterController(otev1.ClusterControllerDestRegistCluster)
 	if err != nil {
 		klog.Errorf("wrapper message for regist child failed: %v", err)
 		return false
@@ -315,11 +315,11 @@ func (c *clusterHandler) handleMessageFromChild(client string, msg []byte) (ret 
 		cc.Spec.ParentClusterName = c.conf.ClusterName
 	}
 
-	if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER {
+	if cc.Spec.Destination == otev1.ClusterControllerDestRegistCluster {
 		ret = c.handleRegistClusterMessage(client, cc)
-	} else if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER {
+	} else if cc.Spec.Destination == otev1.ClusterControllerDestUnregistCluster {
 		ret = c.handleUnregistClusterMessage(client, cc)
-	} else if cc.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_SUBTREE {
+	} else if cc.Spec.Destination == otev1.ClusterControllerDestClusterSubtree {
 		if clusterrouter.Router().HasChild(cc.Spec.ParentClusterName) {
 			// if this is a subtree message and myself is grandparent of the cluster
 			// check router to subtree
@@ -403,7 +403,7 @@ func (c *clusterHandler) closeChild(cr *config.ClusterRegistry) {
 
 	// if this is root, delete cluster from etcd
 	// otherwise, report unregist to root
-	cc, err := cr.WrapperToClusterController(otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER)
+	cc, err := cr.WrapperToClusterController(otev1.ClusterControllerDestUnregistCluster)
 	if err != nil {
 		klog.Errorf("wrapper message for close child failed: %v", err)
 		return
@@ -510,7 +510,7 @@ func getClusterFromClusterRegistry(cr *config.ClusterRegistry) *otev1.Cluster {
 	return &otev1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Name,
-			Namespace: otev1.CLUSTER_NAMESPACE,
+			Namespace: otev1.ClusterNamespace,
 		},
 		Spec: otev1.ClusterSpec{
 			Name:       cr.UserDefineName,

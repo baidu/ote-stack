@@ -46,7 +46,7 @@ func TestInit(t *testing.T) {
 	assert.Error(t, h.valid())
 
 	// test root cluster config
-	h.conf.ClusterUserDefineName = config.ROOT_CLUSTER_NAME
+	h.conf.ClusterUserDefineName = config.RootClusterName
 	assert.Error(t, h.valid())
 	h.conf.TunnelListenAddr = ":8272"
 	assert.Error(t, h.valid())
@@ -154,7 +154,7 @@ func TestStart(t *testing.T) {
 			K8sClient:             fakeK8sClient,
 			EdgeToClusterChan:     make(chan otev1.ClusterController),
 			ClusterToEdgeChan:     make(chan otev1.ClusterController),
-			ClusterUserDefineName: config.ROOT_CLUSTER_NAME,
+			ClusterUserDefineName: config.RootClusterName,
 		},
 		tunn:      fakeTunn,
 		k8sEnable: false,
@@ -204,20 +204,20 @@ func TestHandleMessageFromChild(t *testing.T) {
 
 	cc := otev1.ClusterController{}
 	// regist cluster without cluster info
-	cc.Spec.Destination = otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER
+	cc.Spec.Destination = otev1.ClusterControllerDestRegistCluster
 	ccbytes, err := cc.Serialize()
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.NotNil(t, err)
 	// unregist cluster without cluster info
-	cc.Spec.Destination = otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER
+	cc.Spec.Destination = otev1.ClusterControllerDestUnregistCluster
 	ccbytes, err = cc.Serialize()
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.NotNil(t, err)
 	// resp from child with no namespace and name
 	cc.Spec.ParentClusterName = c.conf.ClusterUserDefineName
-	cc.Spec.Destination = otev1.CLUSTER_CONTROLLER_DEST_API
+	cc.Spec.Destination = otev1.ClusterControllerDestAPI
 	ccbytes, err = cc.Serialize()
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
@@ -281,7 +281,7 @@ func (f *fakeCloudTunnel) RegistClientCloseHandler(fn tunnel.ClientCloseHandleFu
 func newFakeRootClusterHandler(t *testing.T) *clusterHandler {
 	ret := &clusterHandler{
 		conf: &config.ClusterControllerConfig{
-			ClusterUserDefineName: config.ROOT_CLUSTER_NAME,
+			ClusterUserDefineName: config.RootClusterName,
 			TunnelListenAddr:      "8272",
 			K8sClient:             oteclient.NewSimpleClientset(),
 		},

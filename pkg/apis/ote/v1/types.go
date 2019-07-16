@@ -23,27 +23,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// CLUSTER_STATUS_REGIST describe a cluster registed status,
+// ClusterStatusRegist describe a cluster registed status,
 // should be set to Cluster.Spec.Status if a cluster've registed.
 const (
-	CLUSTER_STATUS_REGIST = "regist"
+	ClusterStatusRegist = "regist"
 )
 
-// CLUSTER_CONTROLLER_DEST_* describe the way to process ClusterController,
+// ClusterControllerDest* describe the way to process ClusterController,
 // should be set to ClusterController.Spec.Destination.
 const (
-	CLUSTER_CONTROLLER_DEST_API              = "api"      // sent to k8s apiserver
-	CLUSTER_CONTROLLER_DEST_HELM             = "helm"     // sent to helm
-	CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER   = "regist"   // cluster regist
-	CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER = "unregist" // cluster unregist
-	CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE    = "route"    // cluster route
-	CLUSTER_CONTROLLER_DEST_CLUSTER_SUBTREE  = "subtree"  // cluster subtree
+	ClusterControllerDestAPI             = "api"      // sent to k8s apiserver
+	ClusterControllerDestHelm            = "helm"     // sent to helm
+	ClusterControllerDestRegistCluster   = "regist"   // cluster regist
+	ClusterControllerDestUnregistCluster = "unregist" // cluster unregist
+	ClusterControllerDestClusterRoute    = "route"    // cluster route
+	ClusterControllerDestClusterSubtree  = "subtree"  // cluster subtree
 )
 
-// CLUSTER_NAMESPACE defines the namespace of k8s crd must be in.
+// ClusterNamespace defines the namespace of k8s crd must be in.
 // CRD out of the namespace won't be watched.
 const (
-	CLUSTER_NAMESPACE = "kube-system"
+	ClusterNamespace = "kube-system"
 )
 
 // +genclient

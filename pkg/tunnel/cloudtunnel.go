@@ -164,14 +164,14 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 
 	// get cluster listen addr from header.
 	// TODO if listen addr is duplicated, refuse to connect.
-	listenAddr := r.Header.Get(config.CLUSTER_CONNECT_HEADER_LISTEN_ADDR)
+	listenAddr := r.Header.Get(config.ClusterConnectHeaderListenAddr)
 	if listenAddr == "" {
 		klog.V(1).Infof("cluster %s listenAddr is not specified, should set in header", cluster)
 		http.Error(w, "listenAddr is not specified, should set in header", http.StatusBadRequest)
 		return
 	}
 	// get name of the child
-	name := r.Header.Get(config.CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME)
+	name := r.Header.Get(config.ClusterConnectHeaderUserDefineName)
 	if name == "" {
 		klog.V(1).Infof("cluster %s user-define name is not specified, should set in header", cluster)
 		http.Error(w, "user-define name is not specified, should set in header", http.StatusBadRequest)

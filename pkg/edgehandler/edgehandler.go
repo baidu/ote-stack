@@ -147,9 +147,9 @@ func (e *edgeHandler) handleMessage(c *otev1.ClusterController) error {
 		status *otev1.ClusterControllerStatus
 	)
 
-	if c.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_REGIST_CLUSTER ||
-		c.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_UNREGIST_CLUSTER ||
-		c.Spec.Destination == otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE {
+	if c.Spec.Destination == otev1.ClusterControllerDestRegistCluster ||
+		c.Spec.Destination == otev1.ClusterControllerDestUnregistCluster ||
+		c.Spec.Destination == otev1.ClusterControllerDestClusterRoute {
 		return nil
 	}
 

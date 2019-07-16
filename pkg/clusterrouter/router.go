@@ -161,7 +161,7 @@ func (cr *ClusterRouter) AddRoute(to, port string) error {
 		klog.Errorf(
 			"route to %s already exist from port %s, add route %s-%s failed",
 			to, oldPort, to, port)
-		return config.DUPLICATED_NAME_ERROR
+		return config.DuplicatedNameError
 	}
 	klog.Infof("route update: %v", cr.subtreeRouter)
 	return nil
@@ -286,7 +286,7 @@ func (cr *ClusterRouter) NeighborRouterMessage() *otev1.ClusterController {
 	}
 	cc := otev1.ClusterController{
 		Spec: otev1.ClusterControllerSpec{
-			Destination: otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE,
+			Destination: otev1.ClusterControllerDestClusterRoute,
 			Body:        string(cbyte),
 		},
 	}
@@ -308,7 +308,7 @@ func (cr *ClusterRouter) SubTreeMessage() *otev1.ClusterController {
 	}
 	cc := otev1.ClusterController{
 		Spec: otev1.ClusterControllerSpec{
-			Destination: otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_SUBTREE,
+			Destination: otev1.ClusterControllerDestClusterSubtree,
 			Body:        string(cbyte),
 		},
 	}

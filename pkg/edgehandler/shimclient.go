@@ -47,8 +47,8 @@ func newLocalShimClient(c *config.ClusterControllerConfig) shimServiceClient {
 	local := &localShimClient{
 		handlers: make(map[string]handler.Handler),
 	}
-	local.handlers[otev1.CLUSTER_CONTROLLER_DEST_API] = handler.NewK8sHandler(c.K8sClient)
-	local.handlers[otev1.CLUSTER_CONTROLLER_DEST_HELM] = handler.NewHTTPProxyHandler(c.HelmTillerAddr)
+	local.handlers[otev1.ClusterControllerDestAPI] = handler.NewK8sHandler(c.K8sClient)
+	local.handlers[otev1.ClusterControllerDestHelm] = handler.NewHTTPProxyHandler(c.HelmTillerAddr)
 	return local
 }
 

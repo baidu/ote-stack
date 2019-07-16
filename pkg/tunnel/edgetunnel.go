@@ -81,8 +81,8 @@ func (e *edgeTunnel) connect() error {
 	e.uuid = fmt.Sprintf("%s-%d", e.name, time.Now().Unix())
 	u := url.URL{Scheme: "ws", Host: e.cloudAddr, Path: accessURI + e.uuid}
 	header := http.Header{}
-	header.Add(config.CLUSTER_CONNECT_HEADER_LISTEN_ADDR, e.listenAddr)
-	header.Add(config.CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME, e.name)
+	header.Add(config.ClusterConnectHeaderListenAddr, e.listenAddr)
+	header.Add(config.ClusterConnectHeaderUserDefineName, e.name)
 
 	klog.Infof("connecting to cloudtunnel %s", u.String())
 	// TODO https connection.
