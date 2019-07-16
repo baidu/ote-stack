@@ -75,7 +75,7 @@ func newFakeShim() shimServiceClient {
 	local := &localShimClient{
 		handlers: make(map[string]handler.Handler),
 	}
-	local.handlers[otev1.CLUSTER_CONTROLLER_DEST_API] = &fakeShimHandler{}
+	local.handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
 	return local
 }
 
@@ -323,7 +323,7 @@ func TestHandleMessage(t *testing.T) {
 			Data: otev1.ClusterController{
 				Spec: otev1.ClusterControllerSpec{
 					ParentClusterName: "root",
-					Destination:       otev1.CLUSTER_CONTROLLER_DEST_CLUSTER_ROUTE,
+					Destination:       otev1.ClusterControllerDestClusterRoute,
 				},
 			},
 			ExpectCode:   0,
@@ -334,7 +334,7 @@ func TestHandleMessage(t *testing.T) {
 			Data: otev1.ClusterController{
 				Spec: otev1.ClusterControllerSpec{
 					ParentClusterName: "root",
-					Destination:       otev1.CLUSTER_CONTROLLER_DEST_API,
+					Destination:       otev1.ClusterControllerDestAPI,
 				},
 			},
 			ExpectCode:   200,
@@ -345,7 +345,7 @@ func TestHandleMessage(t *testing.T) {
 			Data: otev1.ClusterController{
 				Spec: otev1.ClusterControllerSpec{
 					ParentClusterName: "root",
-					Destination:       otev1.CLUSTER_CONTROLLER_DEST_HELM,
+					Destination:       otev1.ClusterControllerDestHelm,
 				},
 			},
 			ExpectCode:   500,

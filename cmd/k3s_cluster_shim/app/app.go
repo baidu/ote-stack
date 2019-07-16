@@ -82,7 +82,7 @@ func Run() error {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	s := clustershim.NewShimServer()
-	s.RegisterHandler(otev1.CLUSTER_CONTROLLER_DEST_API, handler.NewK8sHandler(k3sClient))
+	s.RegisterHandler(otev1.ClusterControllerDestAPI, handler.NewK8sHandler(k3sClient))
 
 	go func() {
 		<-signals

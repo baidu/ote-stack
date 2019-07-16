@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	// SELECTOR_PATTERN_DELIMITER defines the delimiter of routing rules.
-	SELECTOR_PATTERN_DELIMITER = ","
+	// SelectorPatternDelimiter defines the delimiter of routing rules.
+	SelectorPatternDelimiter = ","
 )
 
 // Selector is the interface of cluster selector.
@@ -39,7 +39,7 @@ type selector struct {
 
 // NewSelector returns a new selector object with given routing rules.
 func NewSelector(s string) Selector {
-	ps := strings.Split(s, SELECTOR_PATTERN_DELIMITER)
+	ps := strings.Split(s, SelectorPatternDelimiter)
 	for i := range ps {
 		ps[i] = strings.TrimSpace(ps[i])
 	}
@@ -57,5 +57,5 @@ func (s *selector) Has(clusterName string) bool {
 
 // ClustersToSelector combines given clusters to routing rule.
 func ClustersToSelector(clusters *[]string) string {
-	return strings.Join(*clusters, SELECTOR_PATTERN_DELIMITER)
+	return strings.Join(*clusters, SelectorPatternDelimiter)
 }

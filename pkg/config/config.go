@@ -27,22 +27,22 @@ import (
 )
 
 const (
-	// ROOT_CLUSTER_NAME defines the cluster name of root cluster.
-	ROOT_CLUSTER_NAME = "Root"
+	// RootClusterName defines the cluster name of root cluster.
+	RootClusterName = "Root"
 
-	// CLUSTER_CONNECT_HEADER_LISTEN_ADDR defines request header to post listen address of the child.
+	// ClusterConnectHeaderListenAddr defines request header to post listen address of the child.
 	// For edge when connect to parent, set this header to address listend by the cluster,
 	// so let parent know the address of child, thus a cluster can get its neighbor from parent.
-	CLUSTER_CONNECT_HEADER_LISTEN_ADDR = "listen-addr"
-	// CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME is the user-define name of the child
-	CLUSTER_CONNECT_HEADER_USER_DEFINE_NAME = "name"
+	ClusterConnectHeaderListenAddr = "listen-addr"
+	// ClusterConnectHeaderUserDefineName is the user-define name of the child
+	ClusterConnectHeaderUserDefineName = "name"
 
-	// K8S_INFORMAER_SYNC_DURATION defines k8s informer sync seconds.
-	K8S_INFORMAER_SYNC_DURATION = 10
+	// K8sInformerSyncDuration defines k8s informer sync seconds.
+	K8sInformerSyncDuration = 10
 )
 
 var (
-	DUPLICATED_NAME_ERROR = fmt.Errorf("cluster name duplicated")
+	DuplicatedNameError = fmt.Errorf("cluster name duplicated")
 )
 
 // ClusterControllerConfig contains config needed by cluster controller.
@@ -101,5 +101,5 @@ func (cr *ClusterRegistry) WrapperToClusterController(dst string) (*otev1.Cluste
 
 // IsRoot check if clusterName is a root cluster.
 func IsRoot(clusterName string) bool {
-	return ROOT_CLUSTER_NAME == clusterName
+	return RootClusterName == clusterName
 }
