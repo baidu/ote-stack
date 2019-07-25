@@ -28,7 +28,10 @@ import (
 )
 
 const (
-	writeTimeout = 60
+	writeTimeout = time.Second * 15
+	readTimeout  = time.Second * 15
+	idleTimeout  = time.Second * 60
+	stopTimeout  = time.Second * 15
 )
 
 // WSClient is a websocket client.
@@ -76,7 +79,7 @@ func (c *WSClient) WriteMessage(msg []byte) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	c.Conn.SetWriteDeadline(time.Now().Add(writeTimeout * time.Second))
+	c.Conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	if err := c.Conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
 		klog.Errorf("wsclient %s write msg failed: %s", c.Name, err.Error())
 		return err
