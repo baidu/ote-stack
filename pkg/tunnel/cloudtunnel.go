@@ -17,6 +17,7 @@ limitations under the License.
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -65,6 +66,7 @@ type cloudTunnel struct {
 	receiveMessageHandler TunnelReadMessageFunc
 	notifyClientClosed    ClientCloseHandleFunc
 	afterConnectHook      AfterConnectHook
+	server                *http.Server
 }
 
 // NewCloudTunnel returns a new cloudTunnel object.
@@ -209,8 +211,10 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *cloudTunnel) Stop() error {
-	// TODO gradeful stop cloudtunnel.
-	return nil
+	// gradeful stop cloudtunnel.
+	ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
+	defer cancel()
+	return t.server.Shutdown(ctx)
 }
 
 func (t *cloudTunnel) Start() error {
@@ -218,14 +222,16 @@ func (t *cloudTunnel) Start() error {
 	uri := fmt.Sprintf(accessURIPattern, accessURIParam)
 	router.HandleFunc(uri, t.accessHandler)
 
-	// TODO set request timeout.
-	s := http.Server{
-		Addr:    fmt.Sprintf("%s", t.address),
-		Handler: router,
+	t.server = &http.Server{
+		Addr:         fmt.Sprintf("%s", t.address),
+		Handler:      router,
+		WriteTimeout: writeTimeout,
+		ReadTimeout:  readTimeout,
+		IdleTimeout:  idleTimeout,
 	}
 
 	go func() {
-		if err := s.ListenAndServe(); err != nil {
+		if err := t.server.ListenAndServe(); err != nil {
 			klog.Fatalf("fail to start cloudtunnel: %s", err.Error())
 		}
 	}()
