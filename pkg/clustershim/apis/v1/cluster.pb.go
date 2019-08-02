@@ -19,13 +19,10 @@ limitations under the License.
 
 package cluster
 
-import proto "github.com/golang/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
 import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
+	fmt "fmt"
+	proto "github.com/golang/protobuf/proto"
+	math "math"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -37,33 +34,89 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
-type ShimRequest struct {
-	ParentClusterName    string   `protobuf:"bytes,1,opt,name=ParentClusterName,proto3" json:"ParentClusterName,omitempty"`
-	Destination          string   `protobuf:"bytes,2,opt,name=Destination,proto3" json:"Destination,omitempty"`
-	Method               string   `protobuf:"bytes,3,opt,name=Method,proto3" json:"Method,omitempty"`
-	URL                  string   `protobuf:"bytes,4,opt,name=URL,proto3" json:"URL,omitempty"`
-	Body                 string   `protobuf:"bytes,5,opt,name=Body,proto3" json:"Body,omitempty"`
+type MessageHead struct {
+	// MessageID is the uuid of a controller crd.
+	MessageID            string   `protobuf:"bytes,1,opt,name=MessageID,proto3" json:"MessageID,omitempty"`
+	ParentClusterName    string   `protobuf:"bytes,2,opt,name=ParentClusterName,proto3" json:"ParentClusterName,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *MessageHead) Reset()         { *m = MessageHead{} }
+func (m *MessageHead) String() string { return proto.CompactTextString(m) }
+func (*MessageHead) ProtoMessage()    {}
+func (*MessageHead) Descriptor() ([]byte, []int) {
+	return fileDescriptor_3cfb3b8ec240c376, []int{0}
+}
+
+func (m *MessageHead) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MessageHead.Unmarshal(m, b)
+}
+func (m *MessageHead) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MessageHead.Marshal(b, m, deterministic)
+}
+func (m *MessageHead) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MessageHead.Merge(m, src)
+}
+func (m *MessageHead) XXX_Size() int {
+	return xxx_messageInfo_MessageHead.Size(m)
+}
+func (m *MessageHead) XXX_DiscardUnknown() {
+	xxx_messageInfo_MessageHead.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MessageHead proto.InternalMessageInfo
+
+func (m *MessageHead) GetMessageID() string {
+	if m != nil {
+		return m.MessageID
+	}
+	return ""
+}
+
+func (m *MessageHead) GetParentClusterName() string {
+	if m != nil {
+		return m.ParentClusterName
+	}
+	return ""
+}
+
+// ShimRequest is a request to transmit to target server.
+type ShimRequest struct {
+	// ParentClusterName is the name of parent cluster.
+	ParentClusterName string `protobuf:"bytes,1,opt,name=ParentClusterName,proto3" json:"ParentClusterName,omitempty"`
+	// Destination is the target server name.
+	Destination string `protobuf:"bytes,2,opt,name=Destination,proto3" json:"Destination,omitempty"`
+	// Method is the method need to be performed by target server.
+	Method string `protobuf:"bytes,3,opt,name=Method,proto3" json:"Method,omitempty"`
+	// URL is the request URL.
+	URL string `protobuf:"bytes,4,opt,name=URL,proto3" json:"URL,omitempty"`
+	// Body is the request body.
+	Body                 string       `protobuf:"bytes,5,opt,name=Body,proto3" json:"Body,omitempty"`
+	Head                 *MessageHead `protobuf:"bytes,6,opt,name=Head,proto3" json:"Head,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
 func (m *ShimRequest) Reset()         { *m = ShimRequest{} }
 func (m *ShimRequest) String() string { return proto.CompactTextString(m) }
 func (*ShimRequest) ProtoMessage()    {}
 func (*ShimRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_db221571f6945a7c, []int{0}
+	return fileDescriptor_3cfb3b8ec240c376, []int{1}
 }
+
 func (m *ShimRequest) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ShimRequest.Unmarshal(m, b)
 }
 func (m *ShimRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ShimRequest.Marshal(b, m, deterministic)
 }
-func (dst *ShimRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ShimRequest.Merge(dst, src)
+func (m *ShimRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShimRequest.Merge(m, src)
 }
 func (m *ShimRequest) XXX_Size() int {
 	return xxx_messageInfo_ShimRequest.Size(m)
@@ -109,29 +162,42 @@ func (m *ShimRequest) GetBody() string {
 	return ""
 }
 
+func (m *ShimRequest) GetHead() *MessageHead {
+	if m != nil {
+		return m.Head
+	}
+	return nil
+}
+
+// ShimResponse is a response containing result from target server.
 type ShimResponse struct {
-	Timestamp            int64    `protobuf:"varint,1,opt,name=Timestamp,proto3" json:"Timestamp,omitempty"`
-	StatusCode           int32    `protobuf:"varint,2,opt,name=StatusCode,proto3" json:"StatusCode,omitempty"`
-	Body                 string   `protobuf:"bytes,3,opt,name=Body,proto3" json:"Body,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
+	// Timestamp is the timestamp of response.
+	Timestamp int64 `protobuf:"varint,1,opt,name=Timestamp,proto3" json:"Timestamp,omitempty"`
+	// StatusCode is the status code of response.
+	StatusCode int32 `protobuf:"varint,2,opt,name=StatusCode,proto3" json:"StatusCode,omitempty"`
+	// Body is the response body.
+	Body                 string       `protobuf:"bytes,3,opt,name=Body,proto3" json:"Body,omitempty"`
+	Head                 *MessageHead `protobuf:"bytes,4,opt,name=Head,proto3" json:"Head,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
+	XXX_unrecognized     []byte       `json:"-"`
+	XXX_sizecache        int32        `json:"-"`
 }
 
 func (m *ShimResponse) Reset()         { *m = ShimResponse{} }
 func (m *ShimResponse) String() string { return proto.CompactTextString(m) }
 func (*ShimResponse) ProtoMessage()    {}
 func (*ShimResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cluster_db221571f6945a7c, []int{1}
+	return fileDescriptor_3cfb3b8ec240c376, []int{2}
 }
+
 func (m *ShimResponse) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ShimResponse.Unmarshal(m, b)
 }
 func (m *ShimResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ShimResponse.Marshal(b, m, deterministic)
 }
-func (dst *ShimResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ShimResponse.Merge(dst, src)
+func (m *ShimResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShimResponse.Merge(m, src)
 }
 func (m *ShimResponse) XXX_Size() int {
 	return xxx_messageInfo_ShimResponse.Size(m)
@@ -163,101 +229,38 @@ func (m *ShimResponse) GetBody() string {
 	return ""
 }
 
+func (m *ShimResponse) GetHead() *MessageHead {
+	if m != nil {
+		return m.Head
+	}
+	return nil
+}
+
 func init() {
+	proto.RegisterType((*MessageHead)(nil), "cluster.MessageHead")
 	proto.RegisterType((*ShimRequest)(nil), "cluster.ShimRequest")
 	proto.RegisterType((*ShimResponse)(nil), "cluster.ShimResponse")
 }
 
-// Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
+func init() { proto.RegisterFile("cluster.proto", fileDescriptor_3cfb3b8ec240c376) }
 
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion4
-
-// ClusterShimServiceClient is the client API for ClusterShimService service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
-type ClusterShimServiceClient interface {
-	Do(ctx context.Context, in *ShimRequest, opts ...grpc.CallOption) (*ShimResponse, error)
-}
-
-type clusterShimServiceClient struct {
-	cc *grpc.ClientConn
-}
-
-func NewClusterShimServiceClient(cc *grpc.ClientConn) ClusterShimServiceClient {
-	return &clusterShimServiceClient{cc}
-}
-
-func (c *clusterShimServiceClient) Do(ctx context.Context, in *ShimRequest, opts ...grpc.CallOption) (*ShimResponse, error) {
-	out := new(ShimResponse)
-	err := c.cc.Invoke(ctx, "/cluster.ClusterShimService/Do", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// ClusterShimServiceServer is the server API for ClusterShimService service.
-type ClusterShimServiceServer interface {
-	Do(context.Context, *ShimRequest) (*ShimResponse, error)
-}
-
-func RegisterClusterShimServiceServer(s *grpc.Server, srv ClusterShimServiceServer) {
-	s.RegisterService(&_ClusterShimService_serviceDesc, srv)
-}
-
-func _ClusterShimService_Do_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ShimRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ClusterShimServiceServer).Do(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/cluster.ClusterShimService/Do",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ClusterShimServiceServer).Do(ctx, req.(*ShimRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _ClusterShimService_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "cluster.ClusterShimService",
-	HandlerType: (*ClusterShimServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Do",
-			Handler:    _ClusterShimService_Do_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "cluster.proto",
-}
-
-func init() { proto.RegisterFile("cluster.proto", fileDescriptor_cluster_db221571f6945a7c) }
-
-var fileDescriptor_cluster_db221571f6945a7c = []byte{
-	// 242 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x90, 0x41, 0x4b, 0xc3, 0x40,
-	0x10, 0x85, 0x4d, 0xd3, 0x56, 0x3a, 0x55, 0xd0, 0x41, 0x65, 0x11, 0x91, 0x92, 0x93, 0x07, 0xe9,
-	0xc1, 0xfe, 0x03, 0xdb, 0x8b, 0xa0, 0x22, 0x1b, 0xbd, 0xbb, 0x36, 0x03, 0x5d, 0x30, 0x99, 0x98,
-	0x9d, 0x08, 0xfe, 0x16, 0xff, 0xac, 0x74, 0x12, 0x4d, 0xb0, 0xb7, 0x99, 0x6f, 0x1e, 0xbc, 0x37,
-	0x0f, 0x0e, 0xd7, 0xef, 0x75, 0x10, 0xaa, 0xe6, 0x65, 0xc5, 0xc2, 0xb8, 0xdf, 0xae, 0xc9, 0x77,
-	0x04, 0xd3, 0x74, 0xe3, 0x73, 0x4b, 0x1f, 0x35, 0x05, 0xc1, 0x6b, 0x38, 0x7e, 0x72, 0x15, 0x15,
-	0xb2, 0x6c, 0x04, 0x8f, 0x2e, 0x27, 0x13, 0xcd, 0xa2, 0xab, 0x89, 0xdd, 0x3d, 0xe0, 0x0c, 0xa6,
-	0x2b, 0x0a, 0xe2, 0x0b, 0x27, 0x9e, 0x0b, 0x33, 0x50, 0x5d, 0x1f, 0xe1, 0x19, 0x8c, 0x1f, 0x48,
-	0x36, 0x9c, 0x99, 0x58, 0x8f, 0xed, 0x86, 0x47, 0x10, 0xbf, 0xd8, 0x7b, 0x33, 0x54, 0xb8, 0x1d,
-	0x11, 0x61, 0x78, 0xcb, 0xd9, 0x97, 0x19, 0x29, 0xd2, 0x39, 0x79, 0x85, 0x83, 0x26, 0x5c, 0x28,
-	0xb9, 0x08, 0x84, 0x17, 0x30, 0x79, 0xf6, 0x39, 0x05, 0x71, 0x79, 0xa9, 0xa9, 0x62, 0xdb, 0x01,
-	0xbc, 0x04, 0x48, 0xc5, 0x49, 0x1d, 0x96, 0x9c, 0x91, 0x86, 0x19, 0xd9, 0x1e, 0xf9, 0x73, 0x88,
-	0x3b, 0x87, 0x9b, 0x3b, 0xc0, 0xf6, 0xa1, 0xad, 0x51, 0x4a, 0xd5, 0xa7, 0x5f, 0x13, 0x2e, 0x60,
-	0xb0, 0x62, 0x3c, 0x99, 0xff, 0x96, 0xd6, 0x6b, 0xe8, 0xfc, 0xf4, 0x1f, 0x6d, 0xa2, 0x25, 0x7b,
-	0x6f, 0x63, 0xad, 0x76, 0xf1, 0x13, 0x00, 0x00, 0xff, 0xff, 0x3b, 0xea, 0xc8, 0xd5, 0x6b, 0x01,
-	0x00, 0x00,
+var fileDescriptor_3cfb3b8ec240c376 = []byte{
+	// 264 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x91, 0xc1, 0x4a, 0xc3, 0x40,
+	0x10, 0x86, 0x59, 0x93, 0x46, 0x3a, 0x51, 0xd0, 0x41, 0x64, 0x0f, 0x22, 0x21, 0xa7, 0x1c, 0xa4,
+	0x07, 0x7d, 0x03, 0xdb, 0x83, 0x82, 0x15, 0xd9, 0xea, 0xc1, 0xe3, 0x6a, 0x06, 0x1b, 0x30, 0xd9,
+	0x98, 0x99, 0x1c, 0x7c, 0x05, 0xdf, 0xcb, 0xf7, 0x92, 0x6c, 0xa2, 0x0d, 0x58, 0xf1, 0x36, 0xf3,
+	0xcd, 0x0c, 0xfb, 0xff, 0xff, 0xc2, 0xfe, 0xf3, 0x6b, 0xcb, 0x42, 0xcd, 0xac, 0x6e, 0x9c, 0x38,
+	0xdc, 0x1d, 0xda, 0xf4, 0x11, 0xe2, 0x25, 0x31, 0xdb, 0x17, 0xba, 0x22, 0x9b, 0xe3, 0x09, 0x4c,
+	0x87, 0xf6, 0x7a, 0xa1, 0x55, 0xa2, 0xb2, 0xa9, 0xd9, 0x00, 0x3c, 0x83, 0xc3, 0x3b, 0xdb, 0x50,
+	0x25, 0xf3, 0xfe, 0xfa, 0xd6, 0x96, 0xa4, 0x77, 0xfc, 0xd6, 0xef, 0x41, 0xfa, 0xa9, 0x20, 0x5e,
+	0xad, 0x8b, 0xd2, 0xd0, 0x5b, 0x4b, 0x2c, 0xdb, 0xaf, 0xd5, 0x1f, 0xd7, 0x98, 0x40, 0xbc, 0x20,
+	0x96, 0xa2, 0xb2, 0x52, 0xb8, 0x6a, 0x78, 0x65, 0x8c, 0xf0, 0x18, 0xa2, 0x25, 0xc9, 0xda, 0xe5,
+	0x3a, 0xf0, 0xc3, 0xa1, 0xc3, 0x03, 0x08, 0x1e, 0xcc, 0x8d, 0x0e, 0x3d, 0xec, 0x4a, 0x44, 0x08,
+	0x2f, 0x5d, 0xfe, 0xae, 0x27, 0x1e, 0xf9, 0x1a, 0x33, 0x08, 0x3b, 0xc7, 0x3a, 0x4a, 0x54, 0x16,
+	0x9f, 0x1f, 0xcd, 0xbe, 0xf3, 0x19, 0xa5, 0x61, 0xfc, 0x46, 0xfa, 0xa1, 0x60, 0xaf, 0xf7, 0xc1,
+	0xb5, 0xab, 0x98, 0xba, 0x90, 0xee, 0x8b, 0x92, 0x58, 0x6c, 0x59, 0x7b, 0x03, 0x81, 0xd9, 0x00,
+	0x3c, 0x05, 0x58, 0x89, 0x95, 0x96, 0xe7, 0x2e, 0xef, 0xd3, 0x99, 0x98, 0x11, 0xf9, 0x11, 0x13,
+	0x6c, 0x11, 0x13, 0xfe, 0x27, 0xe6, 0x29, 0xf2, 0xff, 0x77, 0xf1, 0x15, 0x00, 0x00, 0xff, 0xff,
+	0x9d, 0x14, 0x01, 0xeb, 0xd0, 0x01, 0x00, 0x00,
 }

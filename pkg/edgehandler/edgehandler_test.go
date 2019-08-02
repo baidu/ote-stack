@@ -22,8 +22,8 @@ import (
 	"time"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustershim"
 	shimv1 "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
-	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -71,12 +71,10 @@ func (f *fakeShimHandler) Do(in *shimv1.ShimRequest) (*shimv1.ShimResponse, erro
 	return resp, nil
 }
 
-func newFakeShim() shimServiceClient {
-	local := &localShimClient{
-		handlers: make(map[string]handler.Handler),
-	}
-	local.handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
-	return local
+func newFakeShim() clustershim.ShimServiceClient {
+	handlers := clustershim.ShimHandler{}
+	handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
+	return clustershim.NewlocalShimClientWithHandler(handlers)
 }
 
 func TestValid(t *testing.T) {

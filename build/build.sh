@@ -12,10 +12,10 @@ function build() {
 
     # build clustercontroller and cluster shim
     OUTPUT_BIN=$OUTPUT/bin
-    go build -o $OUTPUT_BIN/clustercontroller ./cmd/clustercontroller 
-    go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim
-    go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim
-    echo "build done"
+    go build -o $OUTPUT_BIN/clustercontroller ./cmd/clustercontroller && \
+        go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim && \
+        go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim && \
+        echo "build done"
 }
 
 function test() {

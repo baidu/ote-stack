@@ -6,7 +6,7 @@ require (
 	github.com/evanphx/json-patch v4.1.0+incompatible // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/golang/groupcache v0.0.0-20180924190550-6f2cf27854a4 // indirect
-	github.com/golang/protobuf v1.3.1
+	github.com/golang/protobuf v1.3.2
 	github.com/googleapis/gnostic v0.1.0 // indirect
 	github.com/gorilla/mux v1.7.2
 	github.com/gorilla/websocket v1.4.0

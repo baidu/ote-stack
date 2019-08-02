@@ -17,7 +17,6 @@ limitations under the License.
 package clustershim
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -53,7 +52,7 @@ func TestDo(t *testing.T) {
 	}
 
 	for _, sc := range successcase {
-		resp, err := server.Do(context.Background(), sc.Request)
+		resp, err := server.Do(sc.Request)
 		if err != nil {
 			t.Errorf("[%q] unexpected error %v", sc.Name, err)
 		}
@@ -76,7 +75,7 @@ func TestDo(t *testing.T) {
 	}
 
 	for _, ec := range errorcase {
-		_, err := server.Do(context.Background(), ec.Request)
+		_, err := server.Do(ec.Request)
 		if err == nil {
 			t.Errorf("[%q] expected error", ec.Name)
 		}
