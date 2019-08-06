@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package clustermessage;
+
+enum CommandType {
+    Reserved = 0; // no used
+    ClusterRegist = 1; // when a cluster regist
+    ClusterUnregist = 2; // when a cluster unregist
+    NeighborRoute = 3; // parent send its neighbor route to childs
+    SubTreeRoute = 4; // child send its subtree route to parent when reconnect
+    DeployReq = 5;
+    DeployResp = 6;
+    ControlReq = 7;
+    ControlResp = 8;
+    EdgeReport = 9; // shim report edge status to cloud
+}
+
+// ClusterMessage is the message between cluster controllers and maybe cc and cluster shim.
+message ClusterMessage {
+    MessageHead Head = 1;
+    string Body = 2;    
+}
+
+message MessageHead {
+    // MessageID is the uuid of a cluster message.
+    // if the message comes from a crd, the messageid is the name of the crd.
+    string MessageID = 1;
+    CommandType Command = 2;
+    string CluterSelector = 3;
+    string ClusterName = 4;
+    string ParentClusterName = 5;
+}
+
+message ControllerTask {
+    string Destination = 1;
+    string Method = 2;
+    string URI = 3;
+    string Body = 4;
+}
+
+message ControllerTaskResponse {
+    int64 Timestamp = 1;
+    int32 StatusCode = 2;
+    string Body = 3;
+}
+
+message DeployTask {
+    int32 Replicas = 1;
+    map<string, string> PodParams = 2;
+    string Status = 3;
+}
