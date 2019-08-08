@@ -21,37 +21,22 @@ import (
 	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
 )
 
-func pb2ClusterControllerSpec(in *pb.ShimRequest) *otev1.ClusterControllerSpec {
-	return &otev1.ClusterControllerSpec{
-		ParentClusterName: in.ParentClusterName,
-		Destination:       in.Destination,
-		Method:            in.Method,
-		URL:               in.URL,
-		Body:              in.Body,
-	}
-}
-
-func clusterControllerSpec2Pb(spec *otev1.ClusterControllerSpec) *pb.ShimRequest {
+func clusterController2Pb(cc *otev1.ClusterController) *pb.ShimRequest {
 	return &pb.ShimRequest{
-		ParentClusterName: spec.ParentClusterName,
-		Destination:       spec.Destination,
-		Method:            spec.Method,
-		URL:               spec.URL,
-		Body:              spec.Body,
+		ParentClusterName: cc.Spec.ParentClusterName,
+		Destination:       cc.Spec.Destination,
+		Method:            cc.Spec.Method,
+		URL:               cc.Spec.URL,
+		Body:              cc.Spec.Body,
+		Head: &pb.MessageHead{
+			MessageID:         cc.ObjectMeta.Name,
+			ParentClusterName: cc.Spec.ParentClusterName,
+		},
 	}
 }
 
-func clusterControllerStatus2Pb(status *otev1.ClusterControllerStatus) *pb.ShimResponse {
-	return &pb.ShimResponse{
-		Timestamp:  status.Timestamp,
-		StatusCode: int32(status.StatusCode),
-		Body:       status.Body,
-	}
-
-}
-
-func pb2ClusterControllerStatus(in *pb.ShimResponse) *otev1.ClusterControllerStatus {
-	return &otev1.ClusterControllerStatus{
+func pb2ClusterControllerStatus(in *pb.ShimResponse) (*pb.MessageHead, *otev1.ClusterControllerStatus) {
+	return in.Head, &otev1.ClusterControllerStatus{
 		Timestamp:  in.Timestamp,
 		StatusCode: int(in.StatusCode),
 		Body:       in.Body,

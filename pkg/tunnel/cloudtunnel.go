@@ -212,7 +212,7 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 
 func (t *cloudTunnel) Stop() error {
 	// gradeful stop cloudtunnel.
-	ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), StopTimeout)
 	defer cancel()
 	return t.server.Shutdown(ctx)
 }
@@ -225,9 +225,9 @@ func (t *cloudTunnel) Start() error {
 	t.server = &http.Server{
 		Addr:         fmt.Sprintf("%s", t.address),
 		Handler:      router,
-		WriteTimeout: writeTimeout,
-		ReadTimeout:  readTimeout,
-		IdleTimeout:  idleTimeout,
+		WriteTimeout: WriteTimeout,
+		ReadTimeout:  ReadTimeout,
+		IdleTimeout:  IdleTimeout,
 	}
 
 	go func() {
