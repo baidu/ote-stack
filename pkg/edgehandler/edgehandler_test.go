@@ -22,8 +22,8 @@ import (
 	"time"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustershim"
 	shimv1 "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
-	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -71,12 +71,10 @@ func (f *fakeShimHandler) Do(in *shimv1.ShimRequest) (*shimv1.ShimResponse, erro
 	return resp, nil
 }
 
-func newFakeShim() shimServiceClient {
-	local := &localShimClient{
-		handlers: make(map[string]handler.Handler),
-	}
-	local.handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
-	return local
+func newFakeShim() clustershim.ShimServiceClient {
+	handlers := clustershim.ShimHandler{}
+	handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
+	return clustershim.NewlocalShimClientWithHandler(handlers)
 }
 
 func TestValid(t *testing.T) {
@@ -100,7 +98,7 @@ func TestValid(t *testing.T) {
 				ClusterName:           "child",
 				ClusterUserDefineName: "child",
 				K8sClient:             nil,
-				RemoteShimAddr:        "/var/run/shim.sock",
+				RemoteShimAddr:        ":8262",
 				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
@@ -122,7 +120,7 @@ func TestValid(t *testing.T) {
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "",
 				K8sClient:      nil,
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				ParentCluster:  "127.0.0.1:8287",
 			},
 		},
@@ -140,7 +138,7 @@ func TestValid(t *testing.T) {
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "child1",
 				K8sClient:      nil,
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				ParentCluster:  "",
 			},
 		},
@@ -164,7 +162,7 @@ func TestIsRemoteShim(t *testing.T) {
 			Name: "use remote shim",
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "child",
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				K8sClient:      &oteclient.Clientset{},
 			},
 			Expect: true,
@@ -194,7 +192,7 @@ func TestSendMessageToTunnel(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		ClusterToEdgeChan: make(chan otev1.ClusterController),
 	}
@@ -233,7 +231,7 @@ func TestReceiveMessageFromTunnel(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		EdgeToClusterChan: make(chan otev1.ClusterController, 10),
 	}
@@ -302,7 +300,7 @@ func TestHandleMessage(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		EdgeToClusterChan: make(chan otev1.ClusterController, 10),
 	}

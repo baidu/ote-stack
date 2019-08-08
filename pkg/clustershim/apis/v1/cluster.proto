@@ -1,13 +1,11 @@
 syntax = "proto3";
 
 package cluster;
-
-// ClusterShimService is the service that handles the requests from clustercontroller.
-service ClusterShimService {
-    // Do transmits the request to target server.
-    rpc Do(ShimRequest) returns(ShimResponse) {}
+message MessageHead {
+    // MessageID is the uuid of a controller crd.
+    string MessageID = 1;
+    string ParentClusterName = 2;
 }
-
 // ShimRequest is a request to transmit to target server.
 message ShimRequest {
 	// ParentClusterName is the name of parent cluster.
@@ -20,6 +18,7 @@ message ShimRequest {
 	string URL = 4;
 	// Body is the request body.
 	string Body = 5;
+    MessageHead Head = 6;
 }
 
 // ShimResponse is a response containing result from target server.
@@ -30,4 +29,5 @@ message ShimResponse {
 	int32 StatusCode = 2;
 	// Body is the response body.
 	string Body = 3;
+    MessageHead Head = 4;
 }
