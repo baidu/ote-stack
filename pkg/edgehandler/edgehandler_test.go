@@ -98,7 +98,7 @@ func TestValid(t *testing.T) {
 				ClusterName:           "child",
 				ClusterUserDefineName: "child",
 				K8sClient:             nil,
-				RemoteShimAddr:        "/var/run/shim.sock",
+				RemoteShimAddr:        ":8262",
 				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
@@ -120,7 +120,7 @@ func TestValid(t *testing.T) {
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "",
 				K8sClient:      nil,
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				ParentCluster:  "127.0.0.1:8287",
 			},
 		},
@@ -138,7 +138,7 @@ func TestValid(t *testing.T) {
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "child1",
 				K8sClient:      nil,
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				ParentCluster:  "",
 			},
 		},
@@ -162,7 +162,7 @@ func TestIsRemoteShim(t *testing.T) {
 			Name: "use remote shim",
 			Conf: &config.ClusterControllerConfig{
 				ClusterName:    "child",
-				RemoteShimAddr: "/var/run/shim.sock",
+				RemoteShimAddr: ":8262",
 				K8sClient:      &oteclient.Clientset{},
 			},
 			Expect: true,
@@ -192,7 +192,7 @@ func TestSendMessageToTunnel(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		ClusterToEdgeChan: make(chan otev1.ClusterController),
 	}
@@ -231,7 +231,7 @@ func TestReceiveMessageFromTunnel(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		EdgeToClusterChan: make(chan otev1.ClusterController, 10),
 	}
@@ -300,7 +300,7 @@ func TestHandleMessage(t *testing.T) {
 	conf := &config.ClusterControllerConfig{
 		ClusterName:       "child",
 		K8sClient:         nil,
-		RemoteShimAddr:    "/var/run/shim.sock",
+		RemoteShimAddr:    ":8262",
 		ParentCluster:     "127.0.0.1:8287",
 		EdgeToClusterChan: make(chan otev1.ClusterController, 10),
 	}

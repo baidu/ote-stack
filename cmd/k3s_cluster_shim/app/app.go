@@ -61,7 +61,8 @@ func NewK3sClusterShimCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(versionCmd)
-	cmd.PersistentFlags().StringVarP(&shimSock, "listen", "l", "/root/clustershim.sock", "Sock of ClusterShim")
+	cmd.PersistentFlags().StringVarP(&shimSock, "listen", "l",
+		":8262", "Websocket address of ClusterShim")
 	cmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "k", "/root/.kube/config", "KubeConfig file path")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)

@@ -10,9 +10,9 @@ Run the binary as below.
 # same as k3s_cluster_shim
 ./k8s_cluster_shim --kube-config /root/.kube/config
 ```
-The shim will start a grpc server over local unix socket(default "/root/clustershim.sock"). To change the listen address use flag `--listen`.
+The shim will start a websocket server (default ":8262"). To change the listen address use flag `--listen`.
 ```shell
-./k8s_cluster_shim --kube-config /root/.kube/config --listen  /var/run/cluster/clustershim.sock
+./k8s_cluster_shim --kube-config /root/.kube/config --listen :8262
 ```
 If you're using helm to manage applications, then you have to install [tiller proxy server](https://appscode.com/products/swift/) since we haven't implement the direct connection with tiller server yet. Before running the k8s-cluster-shim binary, You need to specify the proxy server address.
 ```shell

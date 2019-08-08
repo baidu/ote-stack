@@ -76,20 +76,20 @@ kubectl apply -f clustercontroller.crd.yaml
 - start the k8s_cluster_shim on the k8s master machine or start the k3s_cluster_shim on the k3s master machine.
 
 ```shell
-./k8s_cluster_shim -l /tmp/cluster.sock  -v 3 // for k8s cluster
-./k3s_cluster_shim -l /tmp/cluster.sock  -v 3 // for k3s cluster
+./k8s_cluster_shim -l :8262  -v 3 // for k8s cluster
+./k3s_cluster_shim -l :8262  -v 3 // for k3s cluster
 ```
 - start the clustercontroller on the k8s master machine or k3s master machine.
 
 ```shell
-./clustercontroller --parent-cluster parent_cluster_ip:8287 -v 3 -n c1 --remote-shim-endpoint /tmp/cluster.sock -l self_ip:8287
+./clustercontroller --parent-cluster parent_cluster_ip:8287 -v 3 -n c1 --remote-shim-endpoint shim_ip:8262 -l self_ip:8287
 ```
 
 Look at the standard output to check whether these two binary programs succeed to start. If the messages look like this, it indicates that the startup is successful.
 
 ![image](./images/quickstart-log.png)
 
-Here parent_cluster_ip:8287 is the address of parent cluster, for example, parent_cluster_ip is the root k8s master ip. And c1 represents which clustercontroller is. You can fill in any string but must make sure it should be unqiue globally. For self_ip is the ip on which clustercontroller listens.
+Here parent_cluster_ip:8287 is the address of parent cluster, for example, parent_cluster_ip is the root k8s master ip. And c1 represents which clustercontroller is. You can fill in any string but must make sure it should be unqiue globally. For self_ip is the ip on which clustercontroller listens, and shim_ip is the ip of host on which cluster shim listens.
 
 If you wanna build more level cluster management, for example, let the c3 clustercontroller be the child of c1 clustercontroller, just start the c3 clustercontroller with parent-cluster arg being the address of c1.
 
@@ -121,7 +121,7 @@ Flags:
       --log_file string                  If non-empty, use this log file
       --logtostderr                      log to standard error instead of files (default true)
   -p, --parent-cluster string            Websocket address to parent cluster
-  -r, --remote-shim-endpoint string      remote cluster shim unix sock address
+  -r, --remote-shim-endpoint string      remote cluster shim address
       --skip_headers                     If true, avoid header prefixes in the log messages
       --stderrthreshold severity         logs at or above this threshold go to stderr (default 2)
   -l, --tunnel-listen string             Tunnel address to listen (default ":8287")
@@ -146,7 +146,7 @@ Flags:
       --helm-addr string                 Helm proxy address
   -h, --help                             help for k8s_cluster_shim
   -k, --kube-config string               KubeConfig file path (default "/root/.kube/config")
-  -l, --listen string                    Sock of ClusterShim (default "/root/clustershim.sock")
+  -l, --listen string                    Websocket address of ClusterShim (default ":8262")
       --log-flush-frequency duration     Maximum number of seconds between log flushes (default 5s)
       --log_backtrace_at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
       --log_dir string                   If non-empty, write log files in this directory

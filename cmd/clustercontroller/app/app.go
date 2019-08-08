@@ -71,7 +71,7 @@ func NewClusterControllerCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&clusterName, "cluster-name", "n", config.RootClusterName, "Current cluster name, must be unique")
 	cmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "k", "/root/.kube/config", "KubeConfig file path")
 	cmd.PersistentFlags().StringVarP(&tunnelListenAddr, "tunnel-listen", "l", ":8287", "Cloud tunnel listen address, e.g., 192.168.0.3:8287")
-	cmd.PersistentFlags().StringVarP(&remoteShimAddr, "remote-shim-endpoint", "r", "", "remote cluster shim unix sock address, e.g., unix://clustercontroller.sock")
+	cmd.PersistentFlags().StringVarP(&remoteShimAddr, "remote-shim-endpoint", "r", "", "remote cluster shim address, e.g., 192.168.0.4:8262")
 	cmd.PersistentFlags().StringVarP(&helmTillerAddr, "helm-tiller-addr", "t", "", "helm tiller http proxy addr, e.g., 192.168.0.4:8288")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)
