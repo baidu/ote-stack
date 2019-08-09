@@ -31,7 +31,7 @@ const (
 	RootClusterName = "Root"
 
 	// ClusterConnectHeaderListenAddr defines request header to post listen address of the child.
-	// For edge when connect to parent, set this header to address listend by the cluster,
+	// For edge when connect to parent, set this header to address listened by the cluster,
 	// so let parent know the address of child, thus a cluster can get its neighbor from parent.
 	ClusterConnectHeaderListenAddr = "listen-addr"
 	// ClusterConnectHeaderUserDefineName is the user-define name of the child
@@ -41,8 +41,9 @@ const (
 	K8sInformerSyncDuration = 10
 )
 
+// ErrDuplicatedName is error message format.
 var (
-	DuplicatedNameError = fmt.Errorf("cluster name duplicated")
+	ErrDuplicatedName = fmt.Errorf("cluster name duplicated")
 )
 
 // ClusterControllerConfig contains config needed by cluster controller.
@@ -68,6 +69,7 @@ type ClusterRegistry struct {
 	ParentName     string
 }
 
+// Serialize is for the ClusterRegistry serialization method.
 func (cr *ClusterRegistry) Serialize() ([]byte, error) {
 	b, err := json.Marshal(cr)
 	if err != nil {
@@ -76,6 +78,7 @@ func (cr *ClusterRegistry) Serialize() ([]byte, error) {
 	return b, nil
 }
 
+// ClusterRegistryDeserialize is for the ClusterRegistry deserialize.
 func ClusterRegistryDeserialize(b []byte) (*ClusterRegistry, error) {
 	cr := ClusterRegistry{}
 	err := json.Unmarshal(b, &cr)
@@ -85,6 +88,7 @@ func ClusterRegistryDeserialize(b []byte) (*ClusterRegistry, error) {
 	return &cr, nil
 }
 
+// WrapperToClusterController is wrapper to ClusterController for ClusterRegistry.
 func (cr *ClusterRegistry) WrapperToClusterController(dst string) (*otev1.ClusterController, error) {
 	cbyte, err := cr.Serialize()
 	if err != nil {

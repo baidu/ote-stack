@@ -136,7 +136,7 @@ func (c *clusterHandler) Start() error {
 			config.K8sInformerSyncDuration*time.Second,
 			oteinformer.WithNamespace(otev1.ClusterNamespace))
 		informer := factory.Ote().V1().ClusterControllers().Informer()
-		// actually, gracefull stop is not supported
+		// actually, graceful stop is not supported
 		stopper := make(chan struct{})
 		// add handler
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -469,7 +469,7 @@ func (c *clusterHandler) mergeToApiserver(cc *otev1.ClusterController) error {
 			}
 		}
 		// update new to apiserver
-		klog.Infof("crd reponse update %s-%s", new.ObjectMeta.Namespace, new.ObjectMeta.Name)
+		klog.Infof("crd response update %s-%s", new.ObjectMeta.Namespace, new.ObjectMeta.Name)
 		c.clusterControllerCRD.Update(new)
 	}
 	return nil
@@ -532,7 +532,7 @@ func (c *clusterHandler) updateRouteToSubtree(
 		return
 	}
 	var err error
-	for to, _ := range subtrees {
+	for to := range subtrees {
 		if childOrGrandChild {
 			err = clusterrouter.Router().AddRoute(to, cc.ObjectMeta.Name)
 		} else {

@@ -81,7 +81,7 @@ func NewClusterControllerCommand() *cobra.Command {
 
 // Run runs cluster controller.
 func Run() error {
-	// make client to k8s apiserver if no remote shim avaliable.
+	// make client to k8s apiserver if no remote shim available.
 	var k8sClient oteclient.Interface
 	var err error
 	if remoteShimAddr == "" {

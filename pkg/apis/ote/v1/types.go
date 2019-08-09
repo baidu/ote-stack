@@ -23,8 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ClusterStatusRegist describe a cluster registed status,
-// should be set to Cluster.Spec.Status if a cluster've registed.
+// ClusterStatusRegist describe a cluster registered status,
+// should be set to Cluster.Spec.Status if a cluster've registered.
 const (
 	ClusterStatusRegist = "regist"
 )
