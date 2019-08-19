@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Pakcage clusterrouter manages cluster route of subtree and neighbor.
+// Package clusterrouter manages cluster route of subtree and neighbor.
 /*
 Route information keeps my childs, neighbor and parent neighbor.
 
@@ -161,7 +161,7 @@ func (cr *ClusterRouter) AddRoute(to, port string) error {
 		klog.Errorf(
 			"route to %s already exist from port %s, add route %s-%s failed",
 			to, oldPort, to, port)
-		return config.DuplicatedNameError
+		return config.ErrDuplicatedName
 	}
 	klog.Infof("route update: %v", cr.subtreeRouter)
 	return nil
@@ -196,12 +196,8 @@ func (cr *ClusterRouter) HasRoute(to, port string) bool {
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()
 
-	if oldPort, ok := cr.subtreeRouter[to]; !ok {
-		return false
-	} else {
-		if oldPort == port {
-			return true
-		}
+	if oldPort, ok := cr.subtreeRouter[to]; ok && oldPort == port {
+		return true
 	}
 	return false
 }
@@ -245,7 +241,7 @@ func (cr *ClusterRouter) SubTreeClusters() []string {
 
 	ret := make([]string, len(cr.subtreeRouter))
 	count := 0
-	for key, _ := range cr.subtreeRouter {
+	for key := range cr.subtreeRouter {
 		ret[count] = key
 		count++
 	}

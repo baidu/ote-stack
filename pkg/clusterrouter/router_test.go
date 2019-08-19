@@ -93,11 +93,21 @@ func TestRoute(t *testing.T) {
 	r.DelRoute("c1", "c1")
 	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c1")
 
-	r.AddRoute("c1", "c1")
-	r.AddRoute("c2", "c3")
-	r.AddRoute("c3", "c3")
-	r.AddRoute("cn", "c1")
-	r.AddRoute("cm", "c1")
+	err = r.AddRoute("c1", "c1")
+	assert.Nil(t, err)
+
+	err = r.AddRoute("c2", "c3")
+	assert.Nil(t, err)
+
+	err = r.AddRoute("c3", "c3")
+	assert.Nil(t, err)
+
+	err = r.AddRoute("cn", "c1")
+	assert.Nil(t, err)
+
+	err = r.AddRoute("cm", "c1")
+	assert.Nil(t, err)
+
 	assert.EqualValues(t,
 		map[string][]string{
 			"c1": []string{"cn"},
