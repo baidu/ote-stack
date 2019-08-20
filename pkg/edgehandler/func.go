@@ -17,28 +17,39 @@ limitations under the License.
 package edgehandler
 
 import (
-	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/golang/protobuf/proto"
+	"k8s.io/klog"
+
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
 )
 
-func clusterController2Pb(cc *otev1.ClusterController) *pb.ShimRequest {
-	return &pb.ShimRequest{
-		ParentClusterName: cc.Spec.ParentClusterName,
-		Destination:       cc.Spec.Destination,
-		Method:            cc.Spec.Method,
-		URL:               cc.Spec.URL,
-		Body:              cc.Spec.Body,
-		Head: &pb.MessageHead{
-			MessageID:         cc.ObjectMeta.Name,
-			ParentClusterName: cc.Spec.ParentClusterName,
-		},
+func pb2SerializedControllerTaskResp(
+	in *pb.ShimResponse) (*pb.MessageHead, []byte) {
+	resp := &clustermessage.ControllerTaskResponse{
+		Timestamp:  in.Timestamp,
+		StatusCode: in.StatusCode,
+		Body:       []byte(in.Body),
 	}
+	data, err := proto.Marshal(resp)
+	if err != nil {
+		klog.Errorf("transfer shim resp to controller task resp failed: %v", err)
+		return nil, nil
+	}
+	return in.Head, data
 }
 
-func pb2ClusterControllerStatus(in *pb.ShimResponse) (*pb.MessageHead, *otev1.ClusterControllerStatus) {
-	return in.Head, &otev1.ClusterControllerStatus{
-		Timestamp:  in.Timestamp,
-		StatusCode: int(in.StatusCode),
-		Body:       in.Body,
+func controllerTask2Pb(
+	msg *clustermessage.ClusterMessage, task *clustermessage.ControllerTask) *pb.ShimRequest {
+	return &pb.ShimRequest{
+		ParentClusterName: msg.Head.ParentClusterName,
+		Destination:       task.Destination,
+		Method:            task.Method,
+		URL:               task.URI,
+		Body:              string(task.Body),
+		Head: &pb.MessageHead{
+			MessageID:         msg.Head.MessageID,
+			ParentClusterName: msg.Head.ParentClusterName,
+		},
 	}
 }

@@ -18,7 +18,7 @@ enum CommandType {
 // ClusterMessage is the message between cluster controllers and maybe cc and cluster shim.
 message ClusterMessage {
     MessageHead Head = 1;
-    string Body = 2;    
+    bytes Body = 2;
 }
 
 message MessageHead {
@@ -26,7 +26,7 @@ message MessageHead {
     // if the message comes from a crd, the messageid is the name of the crd.
     string MessageID = 1;
     CommandType Command = 2;
-    string CluterSelector = 3;
+    string ClusterSelector = 3;
     string ClusterName = 4;
     string ParentClusterName = 5;
 }
@@ -35,13 +35,13 @@ message ControllerTask {
     string Destination = 1;
     string Method = 2;
     string URI = 3;
-    string Body = 4;
+    bytes Body = 4;
 }
 
 message ControllerTaskResponse {
     int64 Timestamp = 1;
     int32 StatusCode = 2;
-    string Body = 3;
+    bytes Body = 3;
 }
 
 message DeployTask {

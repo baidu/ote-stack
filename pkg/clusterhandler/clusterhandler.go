@@ -24,12 +24,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
-	clusterrouter "github.com/baidu/ote-stack/pkg/clusterrouter"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/clusterselector"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteinformer "github.com/baidu/ote-stack/pkg/generated/informers/externalversions"
@@ -168,23 +170,29 @@ func (c *clusterHandler) addClusterController(cc *otev1.ClusterController) {
 	}
 	// add parentClusterName
 	cc.Spec.ParentClusterName = c.conf.ClusterName
+	// transfer crd to cluster message
+	msg := clusterControllerCRDToClusterMessage(cc, clustermessage.CommandType_ControlReq)
+	if msg == nil {
+		klog.Errorf("cluster msg is nil when add a crd %v", cc)
+		return
+	}
 	// send to child
 	// directed broadcast by cluster selector
-	selectedChild := selectChild(cc)
-	for port, portCC := range selectedChild {
-		klog.V(3).Infof("send %v to %s with selector %s", portCC, port, portCC.Spec.ClusterSelector)
-		c.sendToChild(portCC, port)
+	selectedChild := selectChild(msg)
+	for port, portMsg := range selectedChild {
+		klog.V(3).Infof("send %v to %s with selector %s", portMsg, port, portMsg.Head.ClusterSelector)
+		c.sendToChild(portMsg, port)
 	}
 
 	// broadcast to all childs if do not use selector
-	// c.sendToChild(cc)
+	// c.sendToChild(msg)
 }
 
-func selectChild(cc *otev1.ClusterController) map[string]*otev1.ClusterController {
-	selector := clusterselector.NewSelector(cc.Spec.ClusterSelector)
+func selectChild(msg *clustermessage.ClusterMessage) map[string]*clustermessage.ClusterMessage {
+	selector := clusterselector.NewSelector(msg.Head.ClusterSelector)
 	subtreeClusters := clusterrouter.Router().SubTreeClusters()
 	var selectedSubTreeClusters []string
-	ret := make(map[string]*otev1.ClusterController)
+	ret := make(map[string]*clustermessage.ClusterMessage)
 	for _, subtreeCluster := range subtreeClusters {
 		if selector.Has(subtreeCluster) {
 			selectedSubTreeClusters = append(selectedSubTreeClusters, subtreeCluster)
@@ -193,9 +201,9 @@ func selectChild(cc *otev1.ClusterController) map[string]*otev1.ClusterControlle
 	// get out ports of selected subtree clusters
 	portsToSubtreeClusters := clusterrouter.Router().PortsToSubtreeClusters(&selectedSubTreeClusters)
 	for port, subtree := range portsToSubtreeClusters {
-		portCC := cc.DeepCopy()
-		portCC.Spec.ClusterSelector = clusterselector.ClustersToSelector(&subtree)
-		ret[port] = portCC
+		portMsg := proto.Clone(msg).(*clustermessage.ClusterMessage)
+		portMsg.Head.ClusterSelector = clusterselector.ClustersToSelector(&subtree)
+		ret[port] = portMsg
 	}
 	return ret
 }
@@ -223,14 +231,14 @@ sendToChild send ClusterController to child.
 if tos is not empty, send cc to them,
 otherwise, broadcast message to all child.
 */
-func (c *clusterHandler) sendToChild(cc *otev1.ClusterController, tos ...string) {
-	if cc == nil {
+func (c *clusterHandler) sendToChild(msg *clustermessage.ClusterMessage, tos ...string) {
+	if msg == nil {
 		klog.Errorf("message send to child is nil")
 		return
 	}
-	data, err := cc.Serialize()
+	data, err := proto.Marshal(msg)
 	if err != nil {
-		klog.Errorf("serialize clustercontroller crd(%v) failed: %v", cc, err)
+		klog.Errorf("serialize cluster message(%v) failed: %v", msg, err)
 		return
 	}
 	if len(tos) == 0 {
@@ -247,21 +255,21 @@ handleMessageFromParent handler message from parent(edge handler of this process
 */
 func (c *clusterHandler) handleMessageFromParent() {
 	for {
-		cc := <-c.conf.EdgeToClusterChan
+		msg := <-c.conf.EdgeToClusterChan
 		// if it is a route message from parent, update route
 		// otherwise, send to child
-		if cc.Spec.Destination == otev1.ClusterControllerDestClusterRoute {
-			clusterrouter.UpdateRouter(&cc, c.sendToChild)
+		if msg.Head.Command == clustermessage.CommandType_NeighborRoute {
+			clusterrouter.UpdateRouter(&msg, c.sendToChild)
 		} else {
 			// directed broadcast by cluster selector
-			selectedChild := selectChild(&cc)
-			for port, portCC := range selectedChild {
-				klog.V(3).Infof("send %v to %s with selector %s", portCC, port, portCC.Spec.ClusterSelector)
-				c.sendToChild(portCC, port)
+			selectedChild := selectChild(&msg)
+			for port, portMsg := range selectedChild {
+				klog.V(3).Infof("send %v to %s with selector %s", portMsg, port, portMsg.Head.ClusterSelector)
+				c.sendToChild(portMsg, port)
 			}
 
 			// broadcast to all childs if do not use selector
-			// c.sendToChild(cc)
+			// c.sendToChild(msg)
 		}
 	}
 }
@@ -276,7 +284,7 @@ func (c *clusterHandler) checkClusterName(cr *config.ClusterRegistry) bool {
 	}
 
 	cr.ParentName = c.conf.ClusterName
-	cc, err := cr.WrapperToClusterController(otev1.ClusterControllerDestRegistCluster)
+	cc, err := cr.WrapperToClusterMessage(clustermessage.CommandType_ClusterRegist)
 	if err != nil {
 		klog.Errorf("wrapper message for regist child failed: %v", err)
 		return false
@@ -302,38 +310,46 @@ There are things to do with message from child.
 2. the parentClusterName of that message equals to self name, merge to apiserver,
 3. otherwise, transmit to parent.
 */
-func (c *clusterHandler) handleMessageFromChild(client string, msg []byte) (ret error) {
+func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret error) {
 	ret = nil
-	cc, err := otev1.ClusterControllerDeserialize(msg)
+	msg := &clustermessage.ClusterMessage{}
+	err := proto.Unmarshal(data, msg)
 	if err != nil {
-		ret = fmt.Errorf("deserialize clustercontroller(%s) failed: %v", string(msg), err)
+		ret = fmt.Errorf("deserialize cluster message(%s) failed: %v", string(data), err)
+		klog.Error(ret)
+		return
+	}
+	if msg.Head == nil {
+		ret = fmt.Errorf("deserialize cluster message(%s) failed: message head is nil", string(data))
 		klog.Error(ret)
 		return
 	}
 	// if the msg has no parentClusterName, set it to self
-	if cc.Spec.ParentClusterName == "" {
-		cc.Spec.ParentClusterName = c.conf.ClusterName
+	if msg.Head.ParentClusterName == "" {
+		msg.Head.ParentClusterName = c.conf.ClusterName
 	}
 
-	if cc.Spec.Destination == otev1.ClusterControllerDestRegistCluster {
-		ret = c.handleRegistClusterMessage(client, cc)
-	} else if cc.Spec.Destination == otev1.ClusterControllerDestUnregistCluster {
-		ret = c.handleUnregistClusterMessage(client, cc)
-	} else if cc.Spec.Destination == otev1.ClusterControllerDestClusterSubtree {
-		if clusterrouter.Router().HasChild(cc.Spec.ParentClusterName) {
+	switch msg.Head.Command {
+	case clustermessage.CommandType_ClusterRegist:
+		ret = c.handleRegistClusterMessage(client, msg)
+	case clustermessage.CommandType_ClusterUnregist:
+		ret = c.handleUnregistClusterMessage(client, msg)
+	case clustermessage.CommandType_SubTreeRoute:
+		if clusterrouter.Router().HasChild(msg.Head.ParentClusterName) {
 			// if this is a subtree message and myself is grandparent of the cluster
 			// check router to subtree
-			c.updateRouteToSubtree(cc, false)
-		} else if clusterrouter.Router().HasChild(cc.ObjectMeta.Name) {
-			c.updateRouteToSubtree(cc, true)
-			c.transmitToParent(cc)
+			c.updateRouteToSubtree(msg, false)
+		} else if clusterrouter.Router().HasChild(msg.Head.ClusterName) {
+			c.updateRouteToSubtree(msg, true)
+			c.transmitToParent(msg)
 		}
-	} else if cc.Spec.ParentClusterName == c.conf.ClusterName {
-		ret = c.mergeToApiserver(cc)
-	} else {
-		c.transmitToParent(cc)
+	default:
+		if msg.Head.ParentClusterName == c.conf.ClusterName {
+			ret = c.mergeToApiserver(msg)
+		} else {
+			c.transmitToParent(msg)
+		}
 	}
-
 	return
 }
 
@@ -352,9 +368,9 @@ once get a regist message, a cluster should do things below:
 3. record cluster router.
 */
 func (c *clusterHandler) handleRegistClusterMessage(
-	client string, cc *otev1.ClusterController) (ret error) {
+	client string, msg *clustermessage.ClusterMessage) (ret error) {
 	ret = nil
-	cr := getClusterRegistryFromClusterController(cc)
+	cr := getClusterRegistryFromClusterMessage(msg)
 	if cr == nil {
 		ret = fmt.Errorf("regist message cannot get cluster info")
 		klog.Error(ret)
@@ -380,7 +396,7 @@ func (c *clusterHandler) handleRegistClusterMessage(
 			// TODO make the new one reconnect
 		}
 	} else {
-		c.transmitToParent(cc)
+		c.transmitToParent(msg)
 	}
 
 	return
@@ -403,7 +419,7 @@ func (c *clusterHandler) closeChild(cr *config.ClusterRegistry) {
 
 	// if this is root, delete cluster from etcd
 	// otherwise, report unregist to root
-	cc, err := cr.WrapperToClusterController(otev1.ClusterControllerDestUnregistCluster)
+	cc, err := cr.WrapperToClusterMessage(clustermessage.CommandType_ClusterUnregist)
 	if err != nil {
 		klog.Errorf("wrapper message for close child failed: %v", err)
 		return
@@ -418,9 +434,9 @@ otherwise, transmit to parent,
 2. modify route.
 */
 func (c *clusterHandler) handleUnregistClusterMessage(
-	client string, cc *otev1.ClusterController) (ret error) {
+	client string, msg *clustermessage.ClusterMessage) (ret error) {
 	ret = nil
-	cr := getClusterRegistryFromClusterController(cc)
+	cr := getClusterRegistryFromClusterMessage(msg)
 	if cr == nil {
 		ret = fmt.Errorf("unregist message cannot get cluster info")
 		klog.Error(ret)
@@ -438,7 +454,7 @@ func (c *clusterHandler) handleUnregistClusterMessage(
 	if c.isRoot() {
 		c.clusterCRD.Delete(cluster)
 	} else {
-		c.transmitToParent(cc)
+		c.transmitToParent(msg)
 	}
 
 	return
@@ -448,9 +464,14 @@ func (c *clusterHandler) handleUnregistClusterMessage(
 mergeToApiserver merge response to etcd with mutex lock.
 cc is part of response to a cluster controller crd reqeust.
 */
-func (c *clusterHandler) mergeToApiserver(cc *otev1.ClusterController) error {
+func (c *clusterHandler) mergeToApiserver(msg *clustermessage.ClusterMessage) error {
 	mergeToApiserverMutex.Lock()
 	defer mergeToApiserverMutex.Unlock()
+	// transfer cluster message to crd
+	cc := clusterMessageToClusterControllerCRD(msg)
+	if cc == nil {
+		return fmt.Errorf("transfer cluster message to crd failed")
+	}
 	// get clustercontroller crd by name
 	if origin := c.clusterControllerCRD.Get(cc.ObjectMeta.Namespace, cc.ObjectMeta.Name); origin != nil {
 		// merge status and update timestamp
@@ -478,9 +499,9 @@ func (c *clusterHandler) mergeToApiserver(cc *otev1.ClusterController) error {
 /*
 transmitToParent transmit message to parent asynchronously.
 */
-func (c *clusterHandler) transmitToParent(cc *otev1.ClusterController) {
+func (c *clusterHandler) transmitToParent(msg *clustermessage.ClusterMessage) {
 	go func() {
-		c.conf.ClusterToEdgeChan <- *cc
+		c.conf.ClusterToEdgeChan <- *msg
 	}()
 }
 
@@ -494,10 +515,11 @@ func getClusterFromClusterController(cc *otev1.ClusterController) *otev1.Cluster
 	return cluster
 }
 
-func getClusterRegistryFromClusterController(cc *otev1.ClusterController) *config.ClusterRegistry {
-	cr, err := config.ClusterRegistryDeserialize([]byte(cc.Spec.Body))
+func getClusterRegistryFromClusterMessage(
+	msg *clustermessage.ClusterMessage) *config.ClusterRegistry {
+	cr, err := config.ClusterRegistryDeserialize(msg.Body)
 	if err != nil {
-		klog.Errorf("deserialize clusterregistry(%s) failed: %v", cc.Spec.Body, err)
+		klog.Errorf("deserialize clusterregistry(%s) failed: %v", msg.Body, err)
 		return nil
 	}
 	return cr
@@ -526,20 +548,104 @@ func getClusterFromClusterRegistry(cr *config.ClusterRegistry) *otev1.Cluster {
 // updateRouteToSubtree updates router to subtree of child or grandchild.
 // childOrGrandChild is true if it is child, false if it is grandchild
 func (c *clusterHandler) updateRouteToSubtree(
-	cc *otev1.ClusterController, childOrGrandChild bool) {
-	subtrees := clusterrouter.SubtreeFromClusterController(cc)
+	msg *clustermessage.ClusterMessage, childOrGrandChild bool) {
+	subtrees := clusterrouter.SubtreeFromClusterController(msg)
 	if subtrees == nil {
 		return
 	}
 	var err error
 	for to := range subtrees {
 		if childOrGrandChild {
-			err = clusterrouter.Router().AddRoute(to, cc.ObjectMeta.Name)
+			err = clusterrouter.Router().AddRoute(to, msg.Head.ClusterName)
 		} else {
-			err = clusterrouter.Router().AddRoute(to, cc.Spec.ParentClusterName)
+			err = clusterrouter.Router().AddRoute(to, msg.Head.ParentClusterName)
 		}
 		if err != nil {
-			klog.Errorf("add subtree router %s-%s failed: %v", to, cc.Spec.ParentClusterName, err)
+			klog.Errorf("add subtree router %s-%s failed: %v", to, msg.Head.ParentClusterName, err)
 		}
+	}
+}
+
+func clusterControllerCRDToClusterMessage(
+	cc *otev1.ClusterController, command clustermessage.CommandType) *clustermessage.ClusterMessage {
+	if cc == nil {
+		return nil
+	}
+	ret := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			MessageID:         cc.ObjectMeta.Name,
+			ClusterSelector:   cc.Spec.ClusterSelector,
+			ParentClusterName: cc.Spec.ParentClusterName,
+			Command:           command,
+		},
+	}
+	switch command {
+	case clustermessage.CommandType_ControlReq:
+		task := clusterControllerCRDToSerializedControllerTask(cc)
+		if task != nil {
+			ret.Body = task
+		}
+	default:
+		klog.Errorf("cluster controller crd command %s is not supported", command.String())
+	}
+	return ret
+}
+
+func clusterControllerCRDToSerializedControllerTask(
+	cc *otev1.ClusterController) []byte {
+	if cc == nil {
+		return nil
+	}
+	ret := &clustermessage.ControllerTask{
+		Destination: cc.Spec.Destination,
+		Method:      cc.Spec.Method,
+		URI:         cc.Spec.URL,
+		Body:        []byte(cc.Spec.Body),
+	}
+	data, err := proto.Marshal(ret)
+	if err != nil {
+		klog.Errorf("marshal controller task failed: %v", err)
+		return nil
+	}
+	return data
+}
+
+func clusterMessageToClusterControllerCRD(
+	msg *clustermessage.ClusterMessage) *otev1.ClusterController {
+	if msg == nil {
+		return nil
+	}
+	ret := &otev1.ClusterController{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      msg.Head.MessageID,
+			Namespace: otev1.ClusterNamespace,
+		},
+		Status: make(map[string]otev1.ClusterControllerStatus),
+	}
+	switch msg.Head.Command {
+	case clustermessage.CommandType_ControlResp:
+		cluster, status := clusterMessageToClusterControllerStatusCRD(msg)
+		ret.Status[cluster] = *status
+	default:
+		klog.Errorf("command %s is not supported when transfer to crd", msg.Head.Command.String())
+	}
+	return ret
+}
+
+func clusterMessageToClusterControllerStatusCRD(
+	msg *clustermessage.ClusterMessage) (string, *otev1.ClusterControllerStatus) {
+	if msg == nil {
+		return "", nil
+	}
+	controllerTaskResp := &clustermessage.ControllerTaskResponse{}
+	err := proto.Unmarshal([]byte(msg.Body), controllerTaskResp)
+	if err != nil {
+		klog.Errorf("unmarshal controller task resp failed: %v", msg.Body)
+		return "", nil
+	}
+	return msg.Head.ClusterName, &otev1.ClusterControllerStatus{
+		Timestamp:  controllerTaskResp.Timestamp,
+		StatusCode: int(controllerTaskResp.StatusCode),
+		Body:       string(controllerTaskResp.Body),
 	}
 }

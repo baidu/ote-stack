@@ -20,11 +20,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
-	clusterrouter "github.com/baidu/ote-stack/pkg/clusterrouter"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -86,15 +88,15 @@ func TestSelectChild(t *testing.T) {
 	clusterrouter.Router().AddRoute("c4", "c4")
 	clusterrouter.Router().AddRoute("c5", "c4")
 
-	cc := &otev1.ClusterController{
-		Spec: otev1.ClusterControllerSpec{
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
 			ClusterSelector: "c3,c5",
 		},
 	}
-	selected := selectChild(cc)
+	selected := selectChild(msg)
 	assert.Equal(t, 2, len(selected))
-	assert.Equal(t, "c3", selected["c1"].Spec.ClusterSelector)
-	assert.Equal(t, "c5", selected["c4"].Spec.ClusterSelector)
+	assert.Equal(t, "c3", selected["c1"].Head.ClusterSelector)
+	assert.Equal(t, "c5", selected["c4"].Head.ClusterSelector)
 }
 
 func TestHasToProcessClusterController(t *testing.T) {
@@ -110,7 +112,7 @@ func TestHasToProcessClusterController(t *testing.T) {
 	assert.True(t, hasToProcessClusterController(cc))
 
 	cc.Status = map[string]otev1.ClusterControllerStatus{
-		"c1": otev1.ClusterControllerStatus{},
+		"c1": {},
 	}
 	assert.False(t, hasToProcessClusterController(cc))
 }
@@ -122,12 +124,12 @@ func TestSendToChild(t *testing.T) {
 	c.sendToChild(nil)
 	assert.False(t, fakeTunn.broadcastCalled)
 	assert.False(t, fakeTunn.sendCalled)
-	c.sendToChild(&otev1.ClusterController{})
+	c.sendToChild(&clustermessage.ClusterMessage{})
 	time.Sleep(1 * time.Second)
 	assert.True(t, fakeTunn.broadcastCalled)
 	assert.False(t, fakeTunn.sendCalled)
 	fakeTunn.reset()
-	c.sendToChild(&otev1.ClusterController{}, "")
+	c.sendToChild(&clustermessage.ClusterMessage{}, "")
 	time.Sleep(1 * time.Second)
 	assert.False(t, fakeTunn.broadcastCalled)
 	assert.True(t, fakeTunn.sendCalled)
@@ -152,8 +154,8 @@ func TestStart(t *testing.T) {
 		conf: &config.ClusterControllerConfig{
 			TunnelListenAddr:      "fake",
 			K8sClient:             fakeK8sClient,
-			EdgeToClusterChan:     make(chan otev1.ClusterController),
-			ClusterToEdgeChan:     make(chan otev1.ClusterController),
+			EdgeToClusterChan:     make(chan clustermessage.ClusterMessage),
+			ClusterToEdgeChan:     make(chan clustermessage.ClusterMessage),
 			ClusterUserDefineName: config.RootClusterName,
 		},
 		tunn:      fakeTunn,
@@ -165,17 +167,14 @@ func TestStart(t *testing.T) {
 	assert.Nil(t, err)
 
 	// test msg from parent
-	cc1 := otev1.ClusterController{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      "cc1",
-		},
-		Spec: otev1.ClusterControllerSpec{
+	msg := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			ClusterName:     "cc1",
 			ClusterSelector: "c1",
 		},
 	}
 	clusterrouter.Router().AddRoute("c1", "c1")
-	c.conf.EdgeToClusterChan <- cc1
+	c.conf.EdgeToClusterChan <- msg
 	time.Sleep(1 * time.Second)
 	assert.False(t, fakeTunn.broadcastCalled)
 	assert.True(t, fakeTunn.sendCalled)
@@ -202,29 +201,32 @@ func TestHandleMessageFromChild(t *testing.T) {
 	err := c.handleMessageFromChild("c1", []byte("hahaha"))
 	assert.NotNil(t, err)
 
-	cc := otev1.ClusterController{}
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{},
+	}
 	// regist cluster without cluster info
-	cc.Spec.Destination = otev1.ClusterControllerDestRegistCluster
-	ccbytes, err := cc.Serialize()
+	msg.Head.Command = clustermessage.CommandType_ClusterRegist
+	ccbytes, err := proto.Marshal(msg)
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.NotNil(t, err)
 	// unregist cluster without cluster info
-	cc.Spec.Destination = otev1.ClusterControllerDestUnregistCluster
-	ccbytes, err = cc.Serialize()
+	msg.Head.Command = clustermessage.CommandType_ClusterUnregist
+	ccbytes, err = proto.Marshal(msg)
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.NotNil(t, err)
 	// resp from child with no namespace and name
-	cc.Spec.ParentClusterName = c.conf.ClusterUserDefineName
-	cc.Spec.Destination = otev1.ClusterControllerDestAPI
-	ccbytes, err = cc.Serialize()
+	msg.Head.ParentClusterName = c.conf.ClusterUserDefineName
+	msg.Head.Command = clustermessage.CommandType_ControlResp
+	ccbytes, err = proto.Marshal(msg)
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.Nil(t, err)
 	// resp from child transmit to parent
-	cc.Spec.ParentClusterName = c.conf.ClusterUserDefineName + "1"
-	ccbytes, err = cc.Serialize()
+	msg.Head.ParentClusterName = c.conf.ClusterUserDefineName + "1"
+	msg.Head.Command = clustermessage.CommandType_ControlResp
+	ccbytes, err = proto.Marshal(msg)
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.Nil(t, err)
