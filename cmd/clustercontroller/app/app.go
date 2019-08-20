@@ -24,8 +24,8 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/klog"
 
-	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clusterhandler"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/config"
 	"github.com/baidu/ote-stack/pkg/edgehandler"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
@@ -92,9 +92,9 @@ func Run() error {
 	}
 	// make a channel to broadcast to child.
 	// and regist edge/cluster handler to the channel.
-	edgeToClusterChan := make(chan otev1.ClusterController)
+	edgeToClusterChan := make(chan clustermessage.ClusterMessage)
 	// make a channel to return result from cluster handler to edge handler.
-	clusterToEdgeChan := make(chan otev1.ClusterController)
+	clusterToEdgeChan := make(chan clustermessage.ClusterMessage)
 	// make config for cluster controller.
 	clusterConfig := &config.ClusterControllerConfig{
 		TunnelListenAddr:      tunnelListenAddr,

@@ -40,7 +40,7 @@ import (
 
 	"k8s.io/klog"
 
-	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/config"
 )
 
@@ -90,13 +90,15 @@ func (cr *ClusterRouter) Deserialize(b []byte) error {
 }
 
 // RouterNotifier is a func to notify childs(...) of route info of current cluster.
-type RouterNotifier func(*otev1.ClusterController, ...string)
+type RouterNotifier func(*clustermessage.ClusterMessage, ...string)
 
 // Router returns the default cluster router.
 func Router() *ClusterRouter {
 	return &defaultClusterRouter
 }
 
+// AddChild add a child named clusterName with listen addr,
+// and call notifier if add successful.
 func (cr *ClusterRouter) AddChild(clusterName, listen string, notifier RouterNotifier) error {
 	err := func() error {
 		cr.rwMutex.Lock()
@@ -120,6 +122,8 @@ func (cr *ClusterRouter) AddChild(clusterName, listen string, notifier RouterNot
 	return nil
 }
 
+// DelChild delete a chiled named clusterName,
+// and call notifier if delete successful.
 func (cr *ClusterRouter) DelChild(clusterName string, notifier RouterNotifier) {
 	func() {
 		cr.rwMutex.Lock()
@@ -167,6 +171,11 @@ func (cr *ClusterRouter) AddRoute(to, port string) error {
 	return nil
 }
 
+/*
+DelRoute delete a route.
+to is cluster name of node in subtree,
+port is cluster name of a child which can reach to node.
+*/
 func (cr *ClusterRouter) DelRoute(to, port string) {
 	cr.rwMutex.Lock()
 	defer cr.rwMutex.Unlock()
@@ -268,11 +277,14 @@ func (cr *ClusterRouter) updateParentNeighbor(parentRouter *ClusterRouter) bool 
 	return true
 }
 
+// ParentNeighbors return neighbors of parent cluster.
+// key is cluster name, and value is listen address of the cluster.
 func (cr *ClusterRouter) ParentNeighbors() map[string]string {
 	return cr.ParentNeighbor
 }
 
-func (cr *ClusterRouter) NeighborRouterMessage() *otev1.ClusterController {
+// NeighborRouterMessage wrap router info to cluster message.
+func (cr *ClusterRouter) NeighborRouterMessage() *clustermessage.ClusterMessage {
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()
 	cbyte, err := cr.Serialize()
@@ -280,16 +292,17 @@ func (cr *ClusterRouter) NeighborRouterMessage() *otev1.ClusterController {
 		klog.Errorf("serialize cluster router %v failed: %v", cr, err)
 		return nil
 	}
-	cc := otev1.ClusterController{
-		Spec: otev1.ClusterControllerSpec{
-			Destination: otev1.ClusterControllerDestClusterRoute,
-			Body:        string(cbyte),
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_NeighborRoute,
 		},
+		Body: cbyte,
 	}
-	return &cc
+	return msg
 }
 
-func (cr *ClusterRouter) SubTreeMessage() *otev1.ClusterController {
+// SubTreeMessage wrap subtree router info to cluster message.
+func (cr *ClusterRouter) SubTreeMessage() *clustermessage.ClusterMessage {
 	if len(cr.subtreeRouter) == 0 {
 		return nil
 	}
@@ -302,18 +315,19 @@ func (cr *ClusterRouter) SubTreeMessage() *otev1.ClusterController {
 		klog.Errorf("serialize subtree router %v failed: %v", cr, err)
 		return nil
 	}
-	cc := otev1.ClusterController{
-		Spec: otev1.ClusterControllerSpec{
-			Destination: otev1.ClusterControllerDestClusterSubtree,
-			Body:        string(cbyte),
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_SubTreeRoute,
 		},
+		Body: cbyte,
 	}
-	return &cc
+	return msg
 }
 
-func SubtreeFromClusterController(cc *otev1.ClusterController) SubTreeRouter {
+// SubtreeFromClusterController get subtree router info from a cluster message.
+func SubtreeFromClusterController(msg *clustermessage.ClusterMessage) SubTreeRouter {
 	ret := SubTreeRouter{}
-	err := json.Unmarshal([]byte(cc.Spec.Body), &ret)
+	err := json.Unmarshal(msg.Body, &ret)
 	if err != nil {
 		klog.Errorf("deserialize cluster subtree failed: %v", err)
 		return nil
@@ -321,9 +335,9 @@ func SubtreeFromClusterController(cc *otev1.ClusterController) SubTreeRouter {
 	return ret
 }
 
-func neighborRouterFromClusterController(cc *otev1.ClusterController) *ClusterRouter {
+func neighborRouterFromClusterMessage(msg *clustermessage.ClusterMessage) *ClusterRouter {
 	ret := ClusterRouter{}
-	err := ret.Deserialize([]byte(cc.Spec.Body))
+	err := ret.Deserialize(msg.Body)
 	if err != nil {
 		klog.Errorf("deserialize cluster neighbor router failed: %v", err)
 		return nil
@@ -332,8 +346,8 @@ func neighborRouterFromClusterController(cc *otev1.ClusterController) *ClusterRo
 }
 
 // UpdateRouter updates router of current cluster and notify child.
-func UpdateRouter(cc *otev1.ClusterController, notifier RouterNotifier) {
-	r := neighborRouterFromClusterController(cc)
+func UpdateRouter(msg *clustermessage.ClusterMessage, notifier RouterNotifier) {
+	r := neighborRouterFromClusterMessage(msg)
 	if r == nil {
 		return
 	}

@@ -22,7 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 )
 
@@ -56,8 +56,8 @@ type ClusterControllerConfig struct {
 	HelmTillerAddr        string
 	RemoteShimAddr        string
 	K8sClient             oteclient.Interface
-	EdgeToClusterChan     chan otev1.ClusterController
-	ClusterToEdgeChan     chan otev1.ClusterController
+	EdgeToClusterChan     chan clustermessage.ClusterMessage
+	ClusterToEdgeChan     chan clustermessage.ClusterMessage
 }
 
 // ClusterRegistry defines a data structure to use when a cluster regists.
@@ -88,19 +88,20 @@ func ClusterRegistryDeserialize(b []byte) (*ClusterRegistry, error) {
 	return &cr, nil
 }
 
-// WrapperToClusterController is wrapper to ClusterController for ClusterRegistry.
-func (cr *ClusterRegistry) WrapperToClusterController(dst string) (*otev1.ClusterController, error) {
+// WrapperToClusterMessage is wrapper to ClusterMessage for ClusterRegistry.
+func (cr *ClusterRegistry) WrapperToClusterMessage(
+	command clustermessage.CommandType) (*clustermessage.ClusterMessage, error) {
 	cbyte, err := cr.Serialize()
 	if err != nil {
 		return nil, fmt.Errorf("serialize clusterregistry(%v) failed: %v", cr, err)
 	}
-	cc := otev1.ClusterController{
-		Spec: otev1.ClusterControllerSpec{
-			Destination: dst,
-			Body:        string(cbyte),
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: command,
 		},
+		Body: cbyte,
 	}
-	return &cc, nil
+	return msg, nil
 }
 
 // IsRoot check if clusterName is a root cluster.

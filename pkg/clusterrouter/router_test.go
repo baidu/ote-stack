@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
 var (
@@ -35,9 +35,11 @@ func TestChildAndNeighbor(t *testing.T) {
 	assert.NoError(t, r.AddChild("c1", "192.168.0.2:1234", testRouterNotifier))
 	assert.Error(t, r.AddChild("c1", "", testRouterNotifier))
 	assert.Contains(t, defaultClusterRouter.Childs, "c1")
+	assert.True(t, r.HasChild("c1"))
 
 	r.DelChild("c1", testRouterNotifier)
 	assert.NotContains(t, defaultClusterRouter.Childs, "c1")
+	assert.False(t, r.HasChild("c1"))
 	r.DelChild("c1", testRouterNotifier)
 
 	parentR := ClusterRouter{
@@ -79,6 +81,7 @@ func TestRoute(t *testing.T) {
 	err := r.AddRoute("c1", "c1")
 	assert.Nil(t, err)
 	assert.Equal(t, "c1", defaultClusterRouter.subtreeRouter["c1"])
+	assert.True(t, r.HasRoute("c1", "c1"))
 
 	err = r.AddRoute("c2", "c1")
 	assert.Nil(t, err)
@@ -89,6 +92,7 @@ func TestRoute(t *testing.T) {
 
 	r.DelRoute("c2", "c1")
 	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c2")
+	assert.False(t, r.HasRoute("c2", "c1"))
 
 	r.DelRoute("c1", "c1")
 	assert.NotContains(t, defaultClusterRouter.subtreeRouter, "c1")
@@ -110,16 +114,25 @@ func TestRoute(t *testing.T) {
 
 	assert.EqualValues(t,
 		map[string][]string{
-			"c1": []string{"cn"},
-			"c3": []string{"c2"},
+			"c1": {"cn"},
+			"c3": {"c2"},
 		},
 		r.PortsToSubtreeClusters(&[]string{"c2", "cn"}),
 	)
 	assert.ElementsMatch(t,
 		[]string{"c1", "c2", "c3", "cn", "cm"},
 		r.SubTreeClusters())
+
+	msg := r.SubTreeMessage()
+	assert.NotNil(t, msg)
+	assert.Equal(t, clustermessage.CommandType_SubTreeRoute, msg.Head.Command)
+	serial, err := r.subtreeRouter.Serialize()
+	assert.Nil(t, err)
+	assert.Equal(t, serial, msg.Body)
+	subr := SubtreeFromClusterController(msg)
+	assert.Equal(t, r.subtreeRouter, subr)
 }
 
-func testRouterNotifier(cc *otev1.ClusterController, tos ...string) {
+func testRouterNotifier(msg *clustermessage.ClusterMessage, tos ...string) {
 	calledNotifier = true
 }
