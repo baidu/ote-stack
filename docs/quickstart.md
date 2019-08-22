@@ -26,6 +26,10 @@ go get github.com/gorilla/mux
 
 export GO111MODULE=off
 
+// make vendor link
+cd $GOPATH/src/github.com/baidu/ote-stack
+ln -s ../../../github.com/kubernetes/kubernetes/vendor vendor
+
 // compile (compiled binary programs in their own directory)
 cd $GOPATH/src/github.com/baidu/ote-stack/cmd/clustercontroller && go build clustercontroller.go
 cd $GOPATH/src/github.com/baidu/ote-stack/cmd/k8s_cluster_shim && go build k8s_cluster_shim.go
