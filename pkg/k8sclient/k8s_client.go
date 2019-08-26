@@ -21,6 +21,8 @@ package k8sclient
 import (
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
@@ -29,6 +31,38 @@ import (
 
 // NewClient new a k8s client by k8s config file.
 func NewClient(kubeConfig string) (oteclient.Interface, error) {
+	config, err := getRestConfigFromKubeConfigFile(kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// creates the clientset
+	clientset, err := oteclient.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("build client with config from %s failed: %v",
+			kubeConfig, err)
+	}
+	klog.Infof("connect to k8s apiserver %v as ote client success", config.Host)
+	return clientset, nil
+}
+
+func NewK8sClient(kubeConfig string) (kubernetes.Interface, error) {
+	config, err := getRestConfigFromKubeConfigFile(kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("build client with config from %s failed: %v",
+			kubeConfig, err)
+	}
+	klog.Infof("connect to k8s apiserver %v success", config.Host)
+	return clientset, nil
+}
+
+func getRestConfigFromKubeConfigFile(kubeConfig string) (*rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
 	loadingRules.ExplicitPath = kubeConfig
@@ -38,15 +72,7 @@ func NewClient(kubeConfig string) (oteclient.Interface, error) {
 	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
 	config, err := clientConfig.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("get kubernetes config from %s failed: %v",
-			kubeConfig, err)
+		return nil, fmt.Errorf("get kubernetes config from %s failed: %v", kubeConfig, err)
 	}
-	// creates the clientset
-	clientset, err := oteclient.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("build client with config from %s failed: %v",
-			kubeConfig, err)
-	}
-	klog.Infof("connect to k8s apiserver %v success", config.Host)
-	return clientset, nil
+	return config, nil
 }
