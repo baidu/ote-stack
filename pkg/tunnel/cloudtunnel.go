@@ -34,6 +34,9 @@ const (
 	accessURI        = "/access/"
 	accessURIParam   = "cluster_id"
 	accessURIPattern = "/access/{%s}"
+
+	// uri for ote controller manager
+	controllerURI = "/controller"
 )
 
 var upgrader = websocket.Upgrader{}
@@ -67,6 +70,7 @@ type cloudTunnel struct {
 	notifyClientClosed    ClientCloseHandleFunc
 	afterConnectHook      AfterConnectHook
 	server                *http.Server
+	controllers           sync.Map
 }
 
 // NewCloudTunnel returns a new cloudTunnel object.
@@ -161,6 +165,7 @@ func (t *cloudTunnel) connect(cr *config.ClusterRegistry, conn *websocket.Conn) 
 	t.clients.Delete(cr.Name)
 }
 
+// handler for child cluster controller
 func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 	cluster := mux.Vars(r)[accessURIParam]
 
@@ -210,6 +215,27 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 	go t.connect(&cr, conn)
 }
 
+func (t *cloudTunnel) controllerHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		klog.Errorf("connect to controller %s failed: %s", r.RemoteAddr, err.Error())
+		http.Error(w, "fail to upgrade to websocket", http.StatusInternalServerError)
+		return
+	}
+	wsclient := NewWSClient(r.RemoteAddr, conn)
+	_, ok := t.controllers.LoadOrStore(r.RemoteAddr, wsclient)
+	if ok {
+		klog.Infof("controller %s is already connected", r.RemoteAddr)
+		if err := wsclient.Close(); err != nil {
+			klog.Errorf("close websocket connection failed: %s", err.Error())
+		}
+		return
+	}
+	klog.Infof("controller %s is connected", r.RemoteAddr)
+	// TODO root cluster controller send msg to anyone of controllers
+	// TODO root cluster controller get msg from controllers and publish to clusters
+}
+
 func (t *cloudTunnel) Stop() error {
 	// gradeful stop cloudtunnel.
 	ctx, cancel := context.WithTimeout(context.Background(), StopTimeout)
@@ -221,6 +247,8 @@ func (t *cloudTunnel) Start() error {
 	router := mux.NewRouter()
 	uri := fmt.Sprintf(accessURIPattern, accessURIParam)
 	router.HandleFunc(uri, t.accessHandler)
+	// add handler for ote controller manager
+	router.HandleFunc(controllerURI, t.controllerHandler)
 
 	t.server = &http.Server{
 		Addr:         fmt.Sprintf("%s", t.address),

@@ -15,6 +15,7 @@ function build() {
     go build -o $OUTPUT_BIN/clustercontroller ./cmd/clustercontroller && \
         go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim && \
         go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim && \
+        go build -o $OUTPUT_BIN/ote_controller_manager ./cmd/ote_controller_manager && \
         echo "build done"
 }
 
