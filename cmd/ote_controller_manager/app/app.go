@@ -18,13 +18,19 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"flag"
+	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/controllermanager"
@@ -36,6 +42,11 @@ import (
 
 const (
 	informerDuration = 10 * time.Second
+	leaseDuration    = 15 * time.Second
+	renewDeadline    = 10 * time.Second
+	retryPeriod      = 2 * time.Second
+
+	oteControllerManagerName = "ote-controller-manager"
 )
 
 var (
@@ -91,20 +102,60 @@ func Run() error {
 		return err
 	}
 
-	// TODO leader elect
 	// connect to root clustercontroller
 	controllerTunnel := tunnel.NewControllerTunnel(rootClusterControllerAddr)
 	err = controllerTunnel.Start()
 	if err != nil {
 		return err
 	}
-	// start all controllers
-	ctx := createControllerContext(oteClient, k8sClient)
-	ctx.PublishChan = controllerTunnel.SendChan()
-	err = startControllers(ctx)
+	run := func(c context.Context) {
+		ctx := createControllerContext(oteClient, k8sClient)
+		// start all controllers
+		ctx.PublishChan = controllerTunnel.SendChan()
+		err = startControllers(ctx)
+		if err != nil {
+			klog.Fatalf("start controllers failed: %v", err)
+		}
+	}
+
+	// leader elect
+	id, err := os.Hostname()
 	if err != nil {
 		return err
 	}
+
+	// add a uniquifier so that two processes on the same host don't accidentally both become active
+	id = id + "_" + string(uuid.NewUUID())
+	rl, err := resourcelock.New(
+		//resourcelock.EndpointsResourceLock,
+		resourcelock.LeasesResourceLock,
+		"kube-system",
+		oteControllerManagerName,
+		k8sClient.CoreV1(),
+		k8sClient.CoordinationV1(),
+		resourcelock.ResourceLockConfig{
+			Identity: id,
+			// TODO add event recorder for debug
+		})
+	if err != nil {
+		return fmt.Errorf("error creating lock: %v", err)
+	}
+
+	leaderelection.RunOrDie(context.TODO(), leaderelection.LeaderElectionConfig{
+		Lock:          rl,
+		LeaseDuration: leaseDuration,
+		RenewDeadline: renewDeadline,
+		RetryPeriod:   retryPeriod,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: run,
+			OnStoppedLeading: func() {
+				klog.Fatalf("leaderelection lost")
+			},
+		},
+		// TODO add watch dog
+		// participate leader-election if it is connected to cluster controller
+		Name: oteControllerManagerName,
+	})
 
 	// hang.
 	wait := sync.WaitGroup{}
