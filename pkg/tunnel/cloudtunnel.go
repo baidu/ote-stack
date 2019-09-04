@@ -19,6 +19,7 @@ package tunnel
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -41,6 +42,11 @@ const (
 
 var upgrader = websocket.Upgrader{}
 
+// ControllerManagerMsgHandleFunc is a function handle msg from controller manager,
+// string is remote address of the controller manager,
+// and []byte is the msg.
+type ControllerManagerMsgHandleFunc func(string, []byte) error
+
 // CloudTunnel is interface for cloudtunnel.
 type CloudTunnel interface {
 	// Start will start cloudtunnel.
@@ -51,6 +57,8 @@ type CloudTunnel interface {
 	Send(clusterName string, msg []byte) error
 	// Broadcast sends binary message to all connected wsclient.
 	Broadcast(msg []byte)
+	// SendToControllerManager sends msg to anyone of controller manager.
+	SendToControllerManager([]byte) error
 	// RegistCheckNameValidFunc registers ClusterNameChecker.
 	RegistCheckNameValidFunc(fn ClusterNameChecker)
 	// RegistAfterConnectHook registers AfterConnectHook.
@@ -59,6 +67,8 @@ type CloudTunnel interface {
 	RegistReturnMessageFunc(fn TunnelReadMessageFunc)
 	// RegistClientCloseHandler registers ClientCloseHandleFunc.
 	RegistClientCloseHandler(fn ClientCloseHandleFunc)
+	// RegistControllerManagerMsgHandler regists ControllerManagerMsgHandleFunc.
+	RegistControllerManagerMsgHandler(fn ControllerManagerMsgHandleFunc)
 }
 
 // cloudTunnel handles all communications with edgetunnel.
@@ -70,7 +80,9 @@ type cloudTunnel struct {
 	notifyClientClosed    ClientCloseHandleFunc
 	afterConnectHook      AfterConnectHook
 	server                *http.Server
-	controllers           sync.Map
+	controllers           sync.Map // remoteAddr -> wsclient
+	controllersKey        []string
+	controlMsgHandler     ControllerManagerMsgHandleFunc
 }
 
 // NewCloudTunnel returns a new cloudTunnel object.
@@ -80,6 +92,8 @@ func NewCloudTunnel(address string) CloudTunnel {
 		clusterNameCheck:   defaultClusterNameChecker,
 		notifyClientClosed: func(*config.ClusterRegistry) { return },
 		afterConnectHook:   defaultAfterConnectHook,
+		controlMsgHandler:  defaultControlMsgHandler,
+		controllersKey:     make([]string, 0),
 	}
 
 	tunnel.receiveMessageHandler = func(client string, msg []byte) error {
@@ -108,6 +122,15 @@ func (t *cloudTunnel) Send(clusterName string, msg []byte) error {
 	return fmt.Errorf("client %s not found", clusterName)
 }
 
+func (t *cloudTunnel) SendToControllerManager(msg []byte) error {
+	// select a controller and send the msg
+	client := findAController(t.controllers, t.controllersKey)
+	if client == nil {
+		return fmt.Errorf("cannot find a controller to send msg to")
+	}
+	return client.WriteMessage(msg)
+}
+
 func (t *cloudTunnel) RegistCheckNameValidFunc(fn ClusterNameChecker) {
 	t.clusterNameCheck = fn
 }
@@ -122,6 +145,10 @@ func (t *cloudTunnel) RegistClientCloseHandler(fn ClientCloseHandleFunc) {
 
 func (t *cloudTunnel) RegistAfterConnectHook(fn AfterConnectHook) {
 	t.afterConnectHook = fn
+}
+
+func (t *cloudTunnel) RegistControllerManagerMsgHandler(fn ControllerManagerMsgHandleFunc) {
+	t.controlMsgHandler = fn
 }
 
 func (t *cloudTunnel) handleReceiveMessage(client *WSClient) {
@@ -232,8 +259,32 @@ func (t *cloudTunnel) controllerHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	klog.Infof("controller %s is connected", r.RemoteAddr)
-	// TODO root cluster controller send msg to anyone of controllers
-	// TODO root cluster controller get msg from controllers and publish to clusters
+	t.controllersKey = append(t.controllersKey, r.RemoteAddr)
+	// root cluster controller get msg from controllers and publish to clusters
+	go t.handleControlMsg(wsclient)
+}
+
+func (t *cloudTunnel) handleControlMsg(client *WSClient) {
+	if client == nil {
+		return
+	}
+
+	klog.Infof("wsclient %s start read control message", client.Name)
+	for {
+		msg, err := client.ReadMessage()
+		if err != nil {
+			klog.Errorf("wsclient %s read msg error, err:%s", client.Name, err.Error())
+			break
+		}
+		t.controlMsgHandler(client.Name, msg)
+	}
+
+	klog.Infof("cluster %s is disconnected", client.Name)
+
+	// close websocket.
+	t.controllers.Delete(client.Name)
+	t.controllersKey = removeFromSliceByValue(t.controllersKey, client.Name)
+	client.Close()
 }
 
 func (t *cloudTunnel) Stop() error {
@@ -272,3 +323,38 @@ func defaultClusterNameChecker(cr *config.ClusterRegistry) bool {
 }
 
 func defaultAfterConnectHook(cr *config.ClusterRegistry) {}
+
+func defaultControlMsgHandler(remote string, msg []byte) error {
+	return nil
+}
+
+func removeFromSliceByValue(slice []string, s string) []string {
+	n := -1
+	for i, v := range slice {
+		if v == s {
+			n = i
+			break
+		}
+	}
+	if n < 0 {
+		klog.Warningf("not found %s in slice %v", s, slice)
+		return slice
+	}
+	return append(slice[:n], slice[n+1:]...)
+}
+
+func findAController(clientMap sync.Map, clientKey []string) *WSClient {
+	if clientKey == nil || len(clientKey) == 0 {
+		klog.Errorf("client map and key are empty to find a controller")
+		return nil
+	}
+
+	clientName := clientKey[rand.Intn(len(clientKey))]
+	client, ok := clientMap.Load(clientName)
+	if ok {
+		return client.(*WSClient)
+	}
+
+	klog.Warningf("client %s is in client key but has no client(%v)", clientName, clientMap)
+	return findAController(clientMap, removeFromSliceByValue(clientKey, clientName))
+}
