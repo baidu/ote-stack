@@ -39,6 +39,10 @@ import (
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
+const (
+	controllerManagerChanBufferSize = 100
+)
+
 var (
 	mergeToApiserverMutex = &sync.Mutex{}
 )
@@ -55,6 +59,10 @@ type clusterHandler struct {
 	clusterCRD           *k8sclient.ClusterCRD
 	clusterControllerCRD *k8sclient.ClusterControllerCRD
 	k8sEnable            bool
+	// msg from clusters back to controller manager
+	backToControllerManagerChan chan clustermessage.ClusterMessage
+	// msg from controller manager to publish to clusters
+	controllerManagerPublishChan chan clustermessage.ClusterMessage
 }
 
 // NewClusterHandler news a ClusterHandler by ClusterControllerConfig.
@@ -62,6 +70,10 @@ func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error
 	ch := &clusterHandler{
 		conf:      c,
 		k8sEnable: false,
+		backToControllerManagerChan: make(chan clustermessage.ClusterMessage,
+			controllerManagerChanBufferSize),
+		controllerManagerPublishChan: make(chan clustermessage.ClusterMessage,
+			controllerManagerChanBufferSize),
 	}
 	if err := ch.valid(); err != nil {
 		return nil, err
@@ -74,6 +86,7 @@ func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error
 	tunn.RegistReturnMessageFunc(ch.handleMessageFromChild)
 	tunn.RegistClientCloseHandler(ch.closeChild)
 	tunn.RegistAfterConnectHook(ch.afterClusterConnect)
+	tunn.RegistControllerManagerMsgHandler(ch.controllerMsgHandler)
 	ch.tunn = tunn
 	return ch, nil
 }
@@ -331,8 +344,16 @@ func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret
 
 	switch msg.Head.Command {
 	case clustermessage.CommandType_ClusterRegist:
+		if c.isRoot() {
+			ret = c.sendToControllerManager(msg)
+		}
+		// TODO do not access k8s in cluster controller
 		ret = c.handleRegistClusterMessage(client, msg)
 	case clustermessage.CommandType_ClusterUnregist:
+		if c.isRoot() {
+			ret = c.sendToControllerManager(msg)
+		}
+		// TODO do not access k8s in cluster controller
 		ret = c.handleUnregistClusterMessage(client, msg)
 	case clustermessage.CommandType_SubTreeRoute:
 		if clusterrouter.Router().HasChild(msg.Head.ParentClusterName) {
@@ -345,12 +366,33 @@ func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret
 		}
 	default:
 		if msg.Head.ParentClusterName == c.conf.ClusterName {
+			// send to controller manager
+			ret = c.sendToControllerManager(msg)
+			// TODO return error if failed
+			// TODO do not merge to apiserver
 			ret = c.mergeToApiserver(msg)
 		} else {
 			c.transmitToParent(msg)
 		}
 	}
 	return
+}
+
+func (c *clusterHandler) sendToControllerManager(msg *clustermessage.ClusterMessage) error {
+	var ret error
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		ret = fmt.Errorf("serialize cluster message(%v) failed: %v", msg, err)
+		klog.Error(ret)
+		return ret
+	}
+	err = c.tunn.SendToControllerManager(data)
+	if err != nil {
+		ret = fmt.Errorf("send to controller manager failed: %v", err)
+		klog.Error(ret)
+		return ret
+	}
+	return nil
 }
 
 /*
@@ -564,6 +606,25 @@ func (c *clusterHandler) updateRouteToSubtree(
 			klog.Errorf("add subtree router %s-%s failed: %v", to, msg.Head.ParentClusterName, err)
 		}
 	}
+}
+
+func (c *clusterHandler) controllerMsgHandler(clientName string, data []byte) error {
+	// unmarshal msg
+	msg := &clustermessage.ClusterMessage{}
+	err := proto.Unmarshal(data, msg)
+	if err != nil {
+		ret := fmt.Errorf("can not deserialize message from %s, error: %s", clientName, err.Error())
+		klog.Error(ret)
+		return ret
+	}
+
+	// set parent cluster name
+	if msg.Head.ParentClusterName == "" {
+		msg.Head.ParentClusterName = c.conf.ClusterName
+	}
+	// send to downstream channel
+	c.conf.EdgeToClusterChan <- *msg
+	return nil
 }
 
 func clusterControllerCRDToClusterMessage(

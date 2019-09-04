@@ -18,6 +18,7 @@ package k8sclient
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,6 +122,9 @@ func TestK8sClient(t *testing.T) {
 	k, err = NewK8sClient(kubeConfig)
 	assert.Nil(t, err)
 	assert.NotNil(t, k)
+	// remove exist file
+	err = os.Remove(kubeConfig)
+	assert.Nil(t, err)
 }
 
 func writeKubeConfig(t *testing.T, kubeConfig string) {

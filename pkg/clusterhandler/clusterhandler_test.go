@@ -230,12 +230,30 @@ func TestHandleMessageFromChild(t *testing.T) {
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.Nil(t, err)
+	// resp from sub child
+	msg.Head.ParentClusterName = c.conf.ClusterName
+	msg.Head.Command = clustermessage.CommandType_ControlResp
+	ccbytes, err = proto.Marshal(msg)
+	assert.Nil(t, err)
+	err = c.handleMessageFromChild("c1", ccbytes)
+	assert.Nil(t, err)
 }
 
-func TestHandleRegistClusterMessage(t *testing.T) {
-	//croot := newFakeRootClusterHandler(t)
-
-	//err := croot.handleRegistClusterMessage()
+func TestControllerMsgHandler(t *testing.T) {
+	c := newFakeRootClusterHandler(t)
+	// msg unmarshal failed
+	err := c.controllerMsgHandler("c1", []byte{'{'})
+	assert.NotNil(t, err)
+	// msg unmarshal success
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{},
+	}
+	ccbytes, err := proto.Marshal(msg)
+	assert.Nil(t, err)
+	err = c.controllerMsgHandler("c1", ccbytes)
+	assert.Nil(t, err)
+	msgFromChan := <-c.conf.EdgeToClusterChan
+	assert.Equal(t, c.conf.ClusterName, msgFromChan.Head.ParentClusterName)
 }
 
 type fakeCloudTunnel struct {
@@ -272,6 +290,10 @@ func (f *fakeCloudTunnel) Broadcast(msg []byte) {
 	f.broadcastCalled = true
 }
 
+func (f *fakeCloudTunnel) SendToControllerManager(msg []byte) error {
+	return nil
+}
+
 func (f *fakeCloudTunnel) RegistCheckNameValidFunc(fn tunnel.ClusterNameChecker) {}
 
 func (f *fakeCloudTunnel) RegistAfterConnectHook(fn tunnel.AfterConnectHook) {}
@@ -280,12 +302,17 @@ func (f *fakeCloudTunnel) RegistReturnMessageFunc(fn tunnel.TunnelReadMessageFun
 
 func (f *fakeCloudTunnel) RegistClientCloseHandler(fn tunnel.ClientCloseHandleFunc) {}
 
+func (f *fakeCloudTunnel) RegistControllerManagerMsgHandler(
+	fn tunnel.ControllerManagerMsgHandleFunc) {
+}
+
 func newFakeRootClusterHandler(t *testing.T) *clusterHandler {
 	ret := &clusterHandler{
 		conf: &config.ClusterControllerConfig{
 			ClusterUserDefineName: config.RootClusterName,
 			TunnelListenAddr:      "8272",
 			K8sClient:             oteclient.NewSimpleClientset(),
+			EdgeToClusterChan:     make(chan clustermessage.ClusterMessage, 10),
 		},
 		tunn:      fakeTunn,
 		k8sEnable: false,
