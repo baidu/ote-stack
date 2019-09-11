@@ -52,8 +52,13 @@ var (
 	}
 )
 
+// SubTreeRouter is a router which represents from a certain port to a certain node in subtree.
+// The key is the cluster name of the node in subtree,
+// and the value is the cluster name of the node directly connect to current node.
+// A key-value pair means, in current node, you can reach to "key" from "value".
 type SubTreeRouter map[string]string
 
+// Serialize serializes the SubTreeRouter so as to send to neighbors.
 func (s *SubTreeRouter) Serialize() ([]byte, error) {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -62,6 +67,7 @@ func (s *SubTreeRouter) Serialize() ([]byte, error) {
 	return b, nil
 }
 
+// ClusterRouter consists of all router info of a node.
 type ClusterRouter struct {
 	Childs         map[string]string // cluster name -> cluster tunnel listen address
 	Neighbor       map[string]string // same as above
@@ -74,6 +80,7 @@ type ClusterRouter struct {
 	rwMutex *sync.RWMutex
 }
 
+// Serialize serializes a ClusterRouter so as to send to neighbors.
 func (cr *ClusterRouter) Serialize() ([]byte, error) {
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()
@@ -85,6 +92,7 @@ func (cr *ClusterRouter) Serialize() ([]byte, error) {
 	return b, nil
 }
 
+// Deserialize deserializes a ClusterRouter so as to synchronize with neighbors.
 func (cr *ClusterRouter) Deserialize(b []byte) error {
 	return json.Unmarshal(b, cr)
 }
@@ -141,6 +149,7 @@ func (cr *ClusterRouter) DelChild(clusterName string, notifier RouterNotifier) {
 	notifier(defaultClusterRouter.NeighborRouterMessage())
 }
 
+// HasChild returns if the current node has a child named clusterName.
 func (cr *ClusterRouter) HasChild(clusterName string) bool {
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()
@@ -201,6 +210,7 @@ func (cr *ClusterRouter) DelRoute(to, port string) {
 	klog.Infof("route update: %v", cr.subtreeRouter)
 }
 
+// HasRoute returns if the current node has a route from "port" to "to".
 func (cr *ClusterRouter) HasRoute(to, port string) bool {
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()

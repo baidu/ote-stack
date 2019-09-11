@@ -58,6 +58,7 @@ type ClusterController struct {
 	Status map[string]ClusterControllerStatus `json:"status"`
 }
 
+// ClusterControllerSpec is specification of a ClusterController.
 type ClusterControllerSpec struct {
 	ParentClusterName string `json:"parentClusterName"`
 
@@ -69,6 +70,7 @@ type ClusterControllerSpec struct {
 	Body string `json:"body"`
 }
 
+// ClusterControllerStatus is status of a ClusterController.
 type ClusterControllerStatus struct {
 	Timestamp  int64  `json:"timestamp"`
 	StatusCode int    `json:"code"`
@@ -77,6 +79,7 @@ type ClusterControllerStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ClusterControllerList is a list of ClusterController.
 type ClusterControllerList struct {
 	metav1.TypeMeta `json:", inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -95,6 +98,7 @@ type Cluster struct {
 	Status ClusterStatus `json:"status"`
 }
 
+// ClusterSpec is specification of a Cluster.
 type ClusterSpec struct {
 	Name       string `json:"name"`
 	Listen     string `json:"listen"`
@@ -103,6 +107,7 @@ type ClusterSpec struct {
 	Childs map[string]string `json:"childs"`
 }
 
+// ClusterStatus is status of a Cluster.
 type ClusterStatus struct {
 	Status    string `json:"status"`
 	Timestamp int64  `json:"timestamp"`
@@ -110,6 +115,7 @@ type ClusterStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ClusterList is a list of Cluster.
 type ClusterList struct {
 	metav1.TypeMeta `json:", inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

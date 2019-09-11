@@ -37,6 +37,7 @@ const (
 	shimClientName  = "clustercontroller"
 )
 
+// ShimServiceClient is the client interface to a cluster shim.
 type ShimServiceClient interface {
 	Do(in *pb.ShimRequest) (*pb.ShimResponse, error)
 	ReturnChan() <-chan *pb.ShimResponse
@@ -51,8 +52,12 @@ type remoteShimClient struct {
 	respChan chan *pb.ShimResponse
 }
 
+// ShimHandler is a handler map of a shim server.
+// The key is Destination field in ShimRequest,
+// and the value is the corresponding handler.
 type ShimHandler map[string]handler.Handler
 
+// NewlocalShimClient returns a local shim client with default handler.
 func NewlocalShimClient(c *config.ClusterControllerConfig) ShimServiceClient {
 	local := &localShimClient{
 		handlers: make(map[string]handler.Handler),
@@ -62,6 +67,7 @@ func NewlocalShimClient(c *config.ClusterControllerConfig) ShimServiceClient {
 	return local
 }
 
+// NewlocalShimClientWithHandler returns a local shim client with given handlers.
 func NewlocalShimClientWithHandler(handlers ShimHandler) ShimServiceClient {
 	return &localShimClient{
 		handlers: handlers,
@@ -81,6 +87,7 @@ func (s *localShimClient) ReturnChan() <-chan *pb.ShimResponse {
 	return nil
 }
 
+// NewRemoteShimClient returns a remote shim client which is connecting to addr.
 func NewRemoteShimClient(addr string) ShimServiceClient {
 	u := url.URL{
 		Scheme: "ws",

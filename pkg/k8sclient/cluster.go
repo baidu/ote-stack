@@ -61,6 +61,7 @@ func (c *ClusterCRD) Delete(cluster *otev1.Cluster) {
 	}
 }
 
+// Update updates a Cluster.
 func (c *ClusterCRD) Update(cluster *otev1.Cluster) {
 	_, err := c.client.OteV1().Clusters(cluster.ObjectMeta.Namespace).Update(cluster)
 	if err != nil {
