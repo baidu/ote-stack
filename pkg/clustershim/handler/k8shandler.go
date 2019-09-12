@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 )
 
@@ -36,20 +36,36 @@ func NewK8sHandler(cl oteclient.Interface) Handler {
 	return &k8sHandler{restclient: cl.Discovery().RESTClient()}
 }
 
-func (k *k8sHandler) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
+func (k *k8sHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {        
+	switch in.Head.Command {
+	case clustermessage.CommandType_ControlReq:
+		resp, err := k.DoControlRequest(in)
+		return Response(resp, in.Head), err
+	default:
+		return nil, fmt.Errorf("command %s is not supported by k8sHandler", in.Head.Command.String())
+	}
+}
 
+func (k *k8sHandler) DoControlRequest(in *clustermessage.ClusterMessage) ([]byte, error) {
 	var req *rest.Request
-	switch in.Method {
+
+	controllerTask := GetControllerTaskFromClusterMessage(in)
+	if controllerTask == nil {
+		return ControlTaskResponse(http.StatusNotFound, ""), fmt.Errorf("Controllertask Not Found")
+	}
+
+	switch controllerTask.Method {
 	case http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut:
-		req = k.restclient.Verb(in.Method)
+		req = k.restclient.Verb(controllerTask.Method)
 	case http.MethodPatch:
 		req = k.restclient.Patch(types.JSONPatchType)
 	default:
-		return Response(http.StatusMethodNotAllowed, ""), fmt.Errorf("method not allowed")
+		return ControlTaskResponse(http.StatusMethodNotAllowed, ""), fmt.Errorf("method not allowed")
 	}
 
-	req.Body([]byte(in.Body))
-	req.RequestURI(in.URL)
+	req.Body([]byte(controllerTask.Body))
+	req.RequestURI(controllerTask.URI)
+
 	result := req.Do()
 
 	var code int
@@ -57,5 +73,5 @@ func (k *k8sHandler) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
 
 	raw, _ := result.Raw()
 
-	return Response(code, string(raw)), nil
+	return ControlTaskResponse(code, string(raw)), nil
 }

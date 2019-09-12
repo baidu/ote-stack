@@ -20,21 +20,55 @@ package handler
 import (
 	"time"
 
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+	"github.com/golang/protobuf/proto"
+	"k8s.io/klog"
+	
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
 // Handler is shim handler interface that contains
 // the methods required to interact to remote server.
 type Handler interface {
 	// Do handle the request and transmit to corresponding server.
-	Do(*pb.ShimRequest) (*pb.ShimResponse, error)
+	Do(*clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error)
 }
 
-// Response packages the body message to pb.ShimResponse.
-func Response(status int, body string) *pb.ShimResponse {
-	return &pb.ShimResponse{
+// Response packages the body message to clustermessage.ClusterMessage.
+func Response(body []byte, head *clustermessage.MessageHead) *clustermessage.ClusterMessage {
+	msg := &clustermessage.ClusterMessage{
+		Head:	head,
+		Body:	body,
+	}
+	return msg
+}
+
+//ControlTaskResponse packages the body message to clustermessage.ControllerTaskResponse
+//and serialize it.
+func ControlTaskResponse(status int, body string) []byte {
+	data := &clustermessage.ControllerTaskResponse{
 		Timestamp:  time.Now().Unix(),
 		StatusCode: int32(status),
-		Body:       body,
+		Body:       []byte(body),
 	}
+
+	resp, err := proto.Marshal(data)
+	if err != nil {
+		klog.Errorf("marshal ControllerTaskResponse failed: %v", err)
+		return nil
+	}
+	return resp 
+}
+
+func GetControllerTaskFromClusterMessage(
+	msg *clustermessage.ClusterMessage) *clustermessage.ControllerTask {
+	if msg == nil {
+		return nil
+	}
+	task := &clustermessage.ControllerTask{}
+	err := proto.Unmarshal([]byte(msg.Body), task)
+	if err != nil {
+		klog.Errorf("unmarshal controller task failed: %v", err)
+		return nil
+	}
+	return task
 }

@@ -22,11 +22,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	fakerest "k8s.io/client-go/rest/fake"
+	"github.com/golang/protobuf/proto"
 
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	//	fakek8s "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 )
 
@@ -45,61 +47,127 @@ func TestK8sHandlerDo(t *testing.T) {
 	}
 	h := &k8sHandler{restclient: fakeRestClient}
 
+	//unsupportable command
+	data := getControllerTask(http.MethodGet, t)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_NeighborRoute,
+		},
+		Body: data,
+	}
+
+	resp, err := h.Do(msg)
+	assert.Nil(t, resp)
+	assert.NotNil(t, err)
+}
+
+func TestK8sHandlerDoControlRequest(t *testing.T) {
+	fakeRestClient := &fakerest.RESTClient{
+		Client: fakerest.CreateHTTPClient(
+			func(req *http.Request) (*http.Response, error) {
+				body := "HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nOK\n"
+				resp, _ := http.ReadResponse(bufio.NewReader(strings.NewReader(body)), req)
+				return resp, nil
+			},
+		),
+		GroupVersion:         v1.SchemeGroupVersion,
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		VersionedAPIPath:     "/",
+	}
+	h := &k8sHandler{restclient: fakeRestClient}
+	
+	data1 := getControllerTask(http.MethodGet, t)
+	data2 := getControllerTask(http.MethodPost, t)
+	data3 := getControllerTask(http.MethodPut, t)
+	data4 := getControllerTask(http.MethodDelete, t)
+	data5 := getControllerTask(http.MethodPatch, t)
+
 	successcase := []struct {
 		Name       string
-		Request    *pb.ShimRequest
+		Request    *clustermessage.ClusterMessage
 		ExpectCode int32
 	}{
 		{
 			Name: "method Get",
-			Request: &pb.ShimRequest{
-				Method: http.MethodGet,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data1,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name: "method Post",
-			Request: &pb.ShimRequest{
-				Method: http.MethodPost,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data2,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name: "method PUT",
-			Request: &pb.ShimRequest{
-				Method: http.MethodPut,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data3,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name: "method DELETE",
-			Request: &pb.ShimRequest{
-				Method: http.MethodDelete,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data4,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name: "method PATCH",
-			Request: &pb.ShimRequest{
-				Method: http.MethodPatch,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data5,
 			},
 			ExpectCode: 200,
 		},
 	}
 
 	for _, sc := range successcase {
-		resp, err := h.Do(sc.Request)
-		if err != nil {
-			t.Errorf("[%q] unexpected error %v", sc.Name, err)
-		}
+		resp, err := h.DoControlRequest(sc.Request)
+		assert.Nil(t, err)
 
-		if resp.StatusCode != sc.ExpectCode {
-			t.Errorf("[%q] expected %v, got %v", sc.Name, sc.ExpectCode, resp.StatusCode)
+		task := &clustermessage.ControllerTaskResponse{}
+		err = proto.Unmarshal([]byte(resp), task)
+		if err != nil {
+			t.Errorf("unmarshal controller task response failed: %v", err)
 		}
+		assert.Equal(t, sc.ExpectCode, task.StatusCode)
+	}
+
+	data6 := getControllerTask("", t)
+	errorcase := []struct {
+		Name    string
+		Request *clustermessage.ClusterMessage
+	}{
+		{
+			Name: "no method",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_NeighborRoute,
+				},
+				Body: data6,
+			},
+		},
+	}
+	for _, ec := range errorcase {
+		_, err := h.DoControlRequest(ec.Request)
+		assert.NotNil(t, err)
 	}
 }
