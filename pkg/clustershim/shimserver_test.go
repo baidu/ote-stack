@@ -17,14 +17,23 @@ limitations under the License.
 package clustershim
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"reflect"
 	"testing"
 	"time"
-	"fmt"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
-	
+
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/tunnel"
+)
+
+var (
+	testShimServer *ShimServer
 )
 
 type fakeShimHandler struct{}
@@ -37,13 +46,13 @@ func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage
 			StatusCode: 200,
 			Body:       []byte(""),
 		}
-	
+
 		data, err := proto.Marshal(resp)
 		if err != nil {
 			fmt.Errorf("shim resp to controller task resp failed: %v", err)
-			return &clustermessage.ClusterMessage{Head: in.Head,}, nil
+			return &clustermessage.ClusterMessage{Head: in.Head}, nil
 		}
-	
+
 		msg := &clustermessage.ClusterMessage{
 			Head: in.Head,
 			Body: data,
@@ -51,7 +60,7 @@ func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage
 		return msg, nil
 	default:
 		return nil, fmt.Errorf("command %s is not supported by ShimClient", in.Head.Command.String())
-	} 
+	}
 }
 
 func TestDo(t *testing.T) {
@@ -60,11 +69,11 @@ func TestDo(t *testing.T) {
 
 	//unsupportable command
 	data1 := getControllerTask("api", "", "", t)
-	
+
 	msg := &clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{
 			Command: clustermessage.CommandType_NeighborRoute,
-		}, 
+		},
 		Body: data1,
 	}
 
@@ -78,7 +87,7 @@ func TestDoControlRequest(t *testing.T) {
 	server.RegisterHandler("api", &fakeShimHandler{})
 
 	data1 := getControllerTask("api", "", "", t)
-	
+
 	successcase := []struct {
 		Name       string
 		Request    *clustermessage.ClusterMessage
@@ -89,7 +98,7 @@ func TestDoControlRequest(t *testing.T) {
 			Request: &clustermessage.ClusterMessage{
 				Head: &clustermessage.MessageHead{
 					Command: clustermessage.CommandType_ControlReq,
-				}, 
+				},
 				Body: data1,
 			},
 			ExpectCode: 200,
@@ -143,4 +152,122 @@ func TestDoControlRequest(t *testing.T) {
 			assert.NotNil(t, resp)
 		}
 	}
+
+}
+
+func newTestWSClient(s *http.Server, name string) *tunnel.WSClient {
+	u := url.URL{
+		Scheme: "ws",
+		Host:   s.Addr,
+		Path:   fmt.Sprintf("/%s/%s", shimServerPathForClusterController, name),
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		fmt.Printf("newTestWSClient failed: %s", err.Error())
+		return nil
+	}
+	return tunnel.NewWSClient("test", conn)
+}
+func TestClusterName(t *testing.T) {
+	expectName := "test"
+	ccclient := newTestWSClient(testShimServer.server, expectName)
+	if ccclient == nil {
+		t.Errorf("cclient unexpected nil")
+		return
+	}
+
+	if testShimServer.ccclient == nil {
+		t.Errorf("testShimServer.ccclient unexpected nil")
+		return
+	}
+
+	gotName := testShimServer.ClusterName()
+	if gotName != expectName {
+		t.Errorf("ClusterName expected %v, got %v", expectName, gotName)
+	}
+
+	ccclient.Close()
+	time.Sleep(1 * time.Second)
+
+}
+
+func TestWriteMessage(t *testing.T) {
+	ccclient := newTestWSClient(testShimServer.server, "test")
+	sendChan := testShimServer.SendChan()
+
+	if ccclient == nil {
+		t.Errorf("cclient unexpected nil")
+		return
+	}
+
+	if testShimServer.ccclient == nil {
+		t.Errorf("testShimServer.ccclient unexpected nil")
+		return
+	}
+
+	message := func(body string) *clustermessage.ClusterMessage {
+		return &clustermessage.ClusterMessage{
+			Head: &clustermessage.MessageHead{},
+			Body: []byte(body),
+		}
+	}
+
+	testcase := []struct {
+		Name            string
+		SendMessage     *clustermessage.ClusterMessage
+		ExpectedMessage *clustermessage.ClusterMessage
+		PreFunc         func()
+	}{
+		{
+			Name:            "success to write message",
+			SendMessage:     message("msg1"),
+			ExpectedMessage: message("msg1"),
+			PreFunc:         func() {},
+		},
+		{
+			Name:            "cclient is closed",
+			SendMessage:     message("msg2"),
+			ExpectedMessage: &clustermessage.ClusterMessage{},
+			PreFunc:         func() { ccclient.Close() },
+		},
+	}
+
+	var data []byte
+	go func() {
+		var err error
+		for {
+			data, err = ccclient.ReadMessage()
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	for _, c := range testcase {
+		c.PreFunc()
+		sendChan <- *c.SendMessage
+		time.Sleep(1 * time.Second)
+
+		msg := &clustermessage.ClusterMessage{}
+		if data != nil {
+			err := msg.Deserialize(data)
+			if err != nil {
+				t.Errorf("[%q] unexpected error %v", c.Name, err)
+				continue
+			}
+		}
+
+		if !reflect.DeepEqual(c.ExpectedMessage, msg) {
+			t.Errorf("[%q] expected %v, got %v", c.Name, c.ExpectedMessage, msg)
+		}
+	}
+}
+
+func TestMain(m *testing.M) {
+	testShimServer = NewShimServer()
+	go testShimServer.Serve("127.0.0.1:10456")
+	time.Sleep(time.Second * 1)
+	m.Run()
+	testShimServer.Close()
 }

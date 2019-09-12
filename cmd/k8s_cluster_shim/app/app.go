@@ -18,24 +18,32 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"flag"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/informers"
 	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustershim"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
+	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
 var (
 	shimSock   string
 	kubeConfig string
 	helmConfig string
+)
+
+const (
+	informerDuration = 10 * time.Second
 )
 
 // NewK8sClusterShimCommand creates a *cobra.Command object with default parameters.
@@ -75,7 +83,7 @@ func NewK8sClusterShimCommand() *cobra.Command {
 // Run runs the k8s cluster shim.
 func Run() error {
 	// make client to k8s apiserver.
-	k8sClient, err := k8sclient.NewClient(kubeConfig)
+	k8sClient, err := k8sclient.NewK8sClient(kubeConfig)
 	if err != nil {
 		return err
 	}
@@ -89,17 +97,42 @@ func Run() error {
 	// TODO directly connect helm tiller.
 	s.RegisterHandler(otev1.ClusterControllerDestHelm, handler.NewHTTPProxyHandler(helmConfig))
 
+	reporterContext := &reporter.ReporterContext{
+		InformerFactory: informers.NewSharedInformerFactory(k8sClient, informerDuration),
+		ClusterName:     s.ClusterName,
+		SyncChan:        s.SendChan(),
+		StopChan:        context.TODO().Done(),
+	}
+
+	err = startReporters(reporterContext)
+	if err != nil {
+		klog.Fatalf("start reporters failed: %v", err)
+	}
+
 	go func() {
 		<-signals
-		os.Remove(shimSock)
 		s.Close()
 		os.Exit(0)
 	}()
 
 	if err := s.Serve(shimSock); err != nil {
-		klog.Errorf("can not start grpc server: %s ", err.Error())
-		return err
+		klog.Fatalf("can not start shim server: %s ", err.Error())
 	}
 
+	return nil
+}
+
+func startReporters(ctx *reporter.ReporterContext) error {
+	reporters := reporter.NewReporterInitializers()
+	for reporterName, initFn := range reporters {
+		err := initFn(ctx)
+		if err != nil {
+			klog.Errorf("init %s reporter failed: %v", reporterName, err)
+			return err
+		}
+
+		klog.Infof("start reporter %s", reporterName)
+	}
+	ctx.InformerFactory.Start(ctx.StopChan)
 	return nil
 }

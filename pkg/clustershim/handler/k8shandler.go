@@ -21,10 +21,10 @@ import (
 	"net/http"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
-	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 )
 
 type k8sHandler struct {
@@ -32,11 +32,11 @@ type k8sHandler struct {
 }
 
 // NewK8sHandler returns a new k8sHandler.
-func NewK8sHandler(cl oteclient.Interface) Handler {
+func NewK8sHandler(cl kubernetes.Interface) Handler {
 	return &k8sHandler{restclient: cl.Discovery().RESTClient()}
 }
 
-func (k *k8sHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {        
+func (k *k8sHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
 	switch in.Head.Command {
 	case clustermessage.CommandType_ControlReq:
 		resp, err := k.DoControlRequest(in)
