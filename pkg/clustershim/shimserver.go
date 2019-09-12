@@ -27,7 +27,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"k8s.io/klog"
-	
+
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -36,6 +36,7 @@ import (
 const (
 	clusterNameParam                   = "cc_name"
 	shimServerPathForClusterController = "clustercontroller"
+	sendChanBuffer                     = 128
 )
 
 var (
@@ -49,6 +50,7 @@ type ShimServer struct {
 	ccclient    *tunnel.WSClient
 	clientMutex *sync.RWMutex
 	clusterName string
+	sendChan    chan clustermessage.ClusterMessage
 }
 
 // NewShimServer creates a new shimServer.
@@ -56,6 +58,7 @@ func NewShimServer() *ShimServer {
 	return &ShimServer{
 		handlers:    make(map[string]handler.Handler),
 		clientMutex: &sync.RWMutex{},
+		sendChan:    make(chan clustermessage.ClusterMessage, sendChanBuffer),
 	}
 }
 
@@ -172,13 +175,14 @@ func (s *ShimServer) handleReadMessage(msg []byte) {
 		klog.Errorf("marshal shim response failed: %v", err)
 		return
 	}
+
+	// TODO change pb to clustermessage
 	s.clientMutex.RLock()
 	defer s.clientMutex.RUnlock()
 	s.ccclient.WriteMessage(respMsg)
 }
 
 // Serve starts a grpc server over unix socket.
-// TODO: support ip address connection.
 func (s *ShimServer) Serve(addr string) error {
 	router := mux.NewRouter()
 	router.HandleFunc(fmt.Sprintf("/%s/{%s}",
@@ -193,10 +197,13 @@ func (s *ShimServer) Serve(addr string) error {
 	}
 
 	klog.Infof("listen on %s", addr)
+	stop := make(chan struct{})
+	go s.writeMessage(stop)
 	if err := s.server.ListenAndServe(); err != nil {
-		klog.Fatalf("fail to start cloudtunnel: %s", err.Error())
+		klog.Errorf("fail to start shimserver: %s", err.Error())
 	}
 
+	close(stop)
 	return nil
 }
 
@@ -205,4 +212,45 @@ func (s *ShimServer) Close() {
 	ctx, cancel := context.WithTimeout(context.Background(), tunnel.StopTimeout)
 	defer cancel()
 	s.server.Shutdown(ctx)
+}
+
+// ClusterName returns the cluster name.
+func (s *ShimServer) ClusterName() string {
+	return s.clusterName
+}
+
+// SendChan returns the channel that save messages need to be reported.
+func (s *ShimServer) SendChan() chan clustermessage.ClusterMessage {
+	return s.sendChan
+}
+
+func (s *ShimServer) writeMessage(stop chan struct{}) {
+
+	klog.Infof("start to watch sendchan and write message")
+	for {
+		select {
+		case msg := <-s.sendChan:
+			sendMsg, err := proto.Marshal(&msg)
+			if err != nil {
+				klog.Errorf("marshal shim response failed: %v", err)
+				continue
+			}
+
+			s.clientMutex.RLock()
+			if s.ccclient == nil {
+				klog.Warningf("failed to send msg to nil ccclient")
+				s.clientMutex.RUnlock()
+				continue
+			}
+
+			err = s.ccclient.WriteMessage(sendMsg)
+			if err != nil {
+				klog.Errorf("wsclient %s write msg error: %s", s.ccclient.Name, err.Error())
+			}
+			s.clientMutex.RUnlock()
+		case <-stop:
+			klog.Infof("stop to write message")
+			break
+		}
+	}
 }

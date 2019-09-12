@@ -29,6 +29,7 @@ import (
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/config"
+	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
@@ -59,10 +60,17 @@ type ShimHandler map[string]handler.Handler
 
 // NewlocalShimClient returns a local shim client with default handler.
 func NewlocalShimClient(c *config.ClusterControllerConfig) ShimServiceClient {
+	k8sClient, err := k8sclient.NewK8sClient(c.KubeConfig)
+	if err != nil {
+		klog.Errorf("failed to create k8s client: %v", err)
+		return nil
+	}
+
 	local := &localShimClient{
 		handlers: make(map[string]handler.Handler),
 	}
-	local.handlers[otev1.ClusterControllerDestAPI] = handler.NewK8sHandler(c.K8sClient)
+
+	local.handlers[otev1.ClusterControllerDestAPI] = handler.NewK8sHandler(k8sClient)
 	local.handlers[otev1.ClusterControllerDestHelm] = handler.NewHTTPProxyHandler(c.HelmTillerAddr)
 	return local
 }
