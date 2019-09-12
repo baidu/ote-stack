@@ -27,8 +27,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"k8s.io/klog"
-
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+	
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
@@ -65,20 +65,42 @@ func (s *ShimServer) RegisterHandler(name string, h handler.Handler) {
 }
 
 // Do handles the requests and transmits to corresponding server.
-func (s *ShimServer) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
-	klog.V(1).Infof("Received request for %v", in.Destination)
+func (s *ShimServer) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
+	switch in.Head.Command {
+	case clustermessage.CommandType_ControlReq:
+		return s.DoControlRequest(in)
+	default:
+		return nil, fmt.Errorf("command %s is not supported by ShimServer", in.Head.Command.String())
+	}
+}
 
-	h, exist := s.handlers[in.Destination]
+func (s *ShimServer) DoControlRequest(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
+	head := proto.Clone(in.Head).(*clustermessage.MessageHead)
+	head.Command = clustermessage.CommandType_ControlResp
+
+	controllerTask := handler.GetControllerTaskFromClusterMessage(in)
+	if controllerTask == nil {
+		resp := handler.ControlTaskResponse(http.StatusNotFound, "")
+		return handler.Response(resp, head), fmt.Errorf("Controllertask Not Found")
+	}
+	klog.V(1).Infof("Received request for %v", controllerTask.Destination)
+
+	h, exist := s.handlers[controllerTask.Destination]
 	if exist {
 		resp, err := h.Do(in)
+
 		if err != nil {
 			klog.Errorf("handle request error: %v", err)
+		}
+		if resp != nil {
+			resp.Head.Command = clustermessage.CommandType_ControlResp
 		}
 		return resp, err
 	}
 
-	klog.Infof("no handler for %v", in.Destination)
-	return handler.Response(http.StatusNotFound, ""), fmt.Errorf("Not Found")
+	klog.Infof("no handler for %v", controllerTask.Destination)
+	resp := handler.ControlTaskResponse(http.StatusNotFound, "")
+	return handler.Response(resp, head), fmt.Errorf("Not Found")
 }
 
 func (s *ShimServer) do(w http.ResponseWriter, r *http.Request) {
@@ -130,20 +152,21 @@ func (s *ShimServer) readMessage() {
 }
 
 func (s *ShimServer) handleReadMessage(msg []byte) {
-	in := pb.ShimRequest{}
+	in := clustermessage.ClusterMessage{}
 	err := proto.Unmarshal(msg, &in)
 	if err != nil {
 		klog.Errorf("unmarshal shim request failed: %v", err)
 		return
 	}
+
 	resp, err := s.Do(&in)
-	if err != nil {
-		klog.Errorf("execute shim request failed: %v", err)
+	if resp == nil {
+		klog.Errorf("execute shim request failed!")
 		return
 	}
-	// set messageid of resp
-	resp.Head = in.Head
-
+	if err != nil {
+		klog.Errorf("execute shim request failed: %v", err)
+	}
 	respMsg, err := proto.Marshal(resp)
 	if err != nil {
 		klog.Errorf("marshal shim response failed: %v", err)

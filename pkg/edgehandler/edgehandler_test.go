@@ -22,11 +22,11 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/clustershim"
-	shimv1 "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -69,13 +69,31 @@ func (f *fakeEdgeTunnel) Stop() error {
 	return nil
 }
 
-func (f *fakeShimHandler) Do(in *shimv1.ShimRequest) (*shimv1.ShimResponse, error) {
-	resp := &shimv1.ShimResponse{
-		Timestamp:  time.Now().Unix(),
-		StatusCode: 200,
-		Body:       "",
+func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
+	head := &clustermessage.MessageHead{
+		MessageID:           in.Head.MessageID,
+		Command:             clustermessage.CommandType_ControlResp,
+		ParentClusterName:   in.Head.ParentClusterName,      
 	}
-	return resp, nil
+
+	resp := &clustermessage.ControllerTaskResponse{
+            Timestamp:  time.Now().Unix(),
+            StatusCode: 200,
+			Body:       []byte(""),
+	}
+
+	data, err := proto.Marshal(resp)		
+    if err != nil {
+		klog.Errorf("shim resp to controller task resp failed: %v", err)
+		return &clustermessage.ClusterMessage{Head: head,}, nil
+	}
+	
+	msg := &clustermessage.ClusterMessage{
+		Head: head,
+		Body: data,
+	}
+
+	return msg, nil
 }
 
 func newFakeShim() clustershim.ShimServiceClient {

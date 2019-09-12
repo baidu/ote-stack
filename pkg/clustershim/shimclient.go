@@ -25,8 +25,8 @@ import (
 	"github.com/gorilla/websocket"
 	"k8s.io/klog"
 
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/config"
 	"github.com/baidu/ote-stack/pkg/tunnel"
@@ -39,8 +39,8 @@ const (
 
 // ShimServiceClient is the client interface to a cluster shim.
 type ShimServiceClient interface {
-	Do(in *pb.ShimRequest) (*pb.ShimResponse, error)
-	ReturnChan() <-chan *pb.ShimResponse
+	Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error)
+	ReturnChan() <-chan *clustermessage.ClusterMessage
 }
 
 type localShimClient struct {
@@ -49,7 +49,7 @@ type localShimClient struct {
 
 type remoteShimClient struct {
 	client   *tunnel.WSClient
-	respChan chan *pb.ShimResponse
+	respChan chan *clustermessage.ClusterMessage
 }
 
 // ShimHandler is a handler map of a shim server.
@@ -74,16 +74,39 @@ func NewlocalShimClientWithHandler(handlers ShimHandler) ShimServiceClient {
 	}
 }
 
-func (s *localShimClient) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
-	h, exist := s.handlers[in.Destination]
-	if exist {
-		return h.Do(in)
+func (s *localShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {      
+	switch in.Head.Command {
+	case clustermessage.CommandType_ControlReq:
+		return s.DoControlRequest(in)
+	default:
+		return nil, fmt.Errorf("command %s is not supported by ShimClient", in.Head.Command.String())
 	}
-
-	return &pb.ShimResponse{}, fmt.Errorf("no handler for %s", in.Destination)
 }
 
-func (s *localShimClient) ReturnChan() <-chan *pb.ShimResponse {
+func (s *localShimClient) DoControlRequest(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {	
+	head := proto.Clone(in.Head).(*clustermessage.MessageHead)
+	head.Command = clustermessage.CommandType_ControlResp
+
+	controllerTask := handler.GetControllerTaskFromClusterMessage(in)
+	if controllerTask == nil {
+		resp := handler.ControlTaskResponse(http.StatusNotFound, "")
+		return handler.Response(resp, head), fmt.Errorf("ControllerTask Not Found")
+	}
+
+	h, exist := s.handlers[controllerTask.Destination]
+	if exist {
+		resp, err := h.Do(in)
+		if resp != nil {
+			resp.Head.Command = clustermessage.CommandType_ControlResp
+		}	
+		return resp, err
+	}
+
+	resp := handler.ControlTaskResponse(http.StatusNotFound, "")
+	return handler.Response(resp, head), fmt.Errorf("no handler for %s", controllerTask.Destination)
+}
+
+func (s *localShimClient) ReturnChan() <-chan *clustermessage.ClusterMessage {
 	return nil
 }
 
@@ -105,13 +128,13 @@ func NewRemoteShimClient(addr string) ShimServiceClient {
 	}
 	ret := &remoteShimClient{
 		client:   tunnel.NewWSClient(shimClientName, conn),
-		respChan: make(chan *pb.ShimResponse, shimRespChanLen),
+		respChan: make(chan *clustermessage.ClusterMessage, shimRespChanLen),
 	}
 	go ret.handleReceiveMessage()
 	return ret
 }
 
-func (s *remoteShimClient) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
+func (s *remoteShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
 	// serialized req and send to server
 	reqMsg, err := proto.Marshal(in)
 	if err != nil {
@@ -123,7 +146,7 @@ func (s *remoteShimClient) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
 	return nil, nil
 }
 
-func (s *remoteShimClient) ReturnChan() <-chan *pb.ShimResponse {
+func (s *remoteShimClient) ReturnChan() <-chan *clustermessage.ClusterMessage {
 	return s.respChan
 }
 
@@ -136,11 +159,11 @@ func (s *remoteShimClient) handleReceiveMessage() {
 			break
 		}
 
-		// unserialize msg to ShimResponse
-		resp := &pb.ShimResponse{}
+		// unserialize msg to ClusterMessage
+		resp := &clustermessage.ClusterMessage{}
 		err = proto.Unmarshal(msg, resp)
 		if err != nil {
-			klog.Errorf("unmarshal shim request failed: %v", err)
+			klog.Errorf("unmarshal shim response failed: %v", err)
 			continue
 		}
 		s.respChan <- resp

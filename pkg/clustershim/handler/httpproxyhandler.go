@@ -24,8 +24,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+		  
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
 const (
@@ -59,14 +59,29 @@ func NewHTTPProxyHandler(address string) Handler {
 	}
 }
 
-func (h *httpProxyHandler) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
-	url := h.addr + in.URL
+func (h *httpProxyHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
+	switch in.Head.Command {
+	case clustermessage.CommandType_ControlReq:
+		resp, err := h.DoControlRequest(in)
+		return Response(resp, in.Head), err
+	default:
+		return nil, fmt.Errorf("command %s is not supported by httpProxyHandler", in.Head.Command.String())
+	}
+}
 
+func (h *httpProxyHandler) DoControlRequest(in *clustermessage.ClusterMessage) ([]byte, error) {
 	var req *http.Request
 	var err error
 
-	buf := bytes.NewBuffer([]byte(in.Body))
-	switch method := in.Method; method {
+	controllerTask := GetControllerTaskFromClusterMessage(in)
+	if controllerTask == nil {
+		return ControlTaskResponse(http.StatusNotFound, ""), fmt.Errorf("Controllertask Not Found")
+	}
+
+	url := h.addr + controllerTask.URI
+	buf := bytes.NewBuffer([]byte(controllerTask.Body))
+
+	switch controllerTask.Method {
 	case http.MethodGet:
 		req, err = http.NewRequest(http.MethodGet, url, buf)
 	case http.MethodPost:
@@ -76,24 +91,24 @@ func (h *httpProxyHandler) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
 	case http.MethodPut:
 		req, err = http.NewRequest(http.MethodPut, url, buf)
 	default:
-		return Response(http.StatusMethodNotAllowed, ""), fmt.Errorf("method not allowed")
+		return ControlTaskResponse(http.StatusMethodNotAllowed, ""), fmt.Errorf("method not allowed")
 	}
 
 	if err != nil {
-		return Response(http.StatusInternalServerError, ""), err
+		return ControlTaskResponse(http.StatusInternalServerError, ""), err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return Response(http.StatusInternalServerError, ""), err
+		return ControlTaskResponse(http.StatusInternalServerError, ""), err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Response(http.StatusInternalServerError, ""), err
+		return ControlTaskResponse(http.StatusInternalServerError, ""), err
 	}
 
-	return Response(resp.StatusCode, string(body)), nil
+	return ControlTaskResponse(resp.StatusCode, string(body)), nil
 }

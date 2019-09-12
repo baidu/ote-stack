@@ -22,7 +22,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	pb "github.com/baidu/ote-stack/pkg/clustershim/apis/v1"
+	"github.com/golang/protobuf/proto"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
 var (
@@ -36,93 +39,143 @@ func initTestServer() {
 	}))
 }
 
-func TestHTTPProxyHandlerDo(t *testing.T) {
+//getControllerTask get ControllerTask and serialize it
+func getControllerTask(method string, t *testing.T) []byte {
+	msg := &clustermessage.ControllerTask{
+		Method: method,
+		URI:    "/",
+	}
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		t.Errorf("to controller task request failed: %v", err)
+		return nil
+	}
+	return data	
+}
+
+func TestHTTPProxyHandlerDoControlRequest(t *testing.T) {
 	initTestServer()
 	addr := testServer.Listener.Addr().String()
+
+	data1 := getControllerTask(http.MethodGet, t)
+	data2 := getControllerTask(http.MethodPost, t)
+	data3 := getControllerTask(http.MethodPut, t)
+	data4 := getControllerTask(http.MethodDelete, t)
+	data5 := getControllerTask(http.MethodPatch, t)
 
 	successcase := []struct {
 		Name       string
 		Address    string
-		Request    *pb.ShimRequest
+		Request    *clustermessage.ClusterMessage
 		ExpectCode int32
 	}{
 		{
 			Name:    "method Get",
 			Address: addr,
-			Request: &pb.ShimRequest{
-				Method: http.MethodGet,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data1,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name:    "method Post",
 			Address: addr,
-			Request: &pb.ShimRequest{
-				Method: http.MethodPost,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data2,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name:    "method PUT",
 			Address: addr,
-			Request: &pb.ShimRequest{
-				Method: http.MethodPut,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data3,
 			},
 			ExpectCode: 200,
 		},
 		{
 			Name:    "method DELETE",
 			Address: addr,
-			Request: &pb.ShimRequest{
-				Method: http.MethodDelete,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data4,
 			},
 			ExpectCode: 200,
 		},
 	}
 
 	for _, sc := range successcase {
-		h := NewHTTPProxyHandler(sc.Address)
-		resp, err := h.Do(sc.Request)
-		if err != nil {
-			t.Errorf("[%q] unexpected error %v", sc.Name, err)
-		}
+		h := NewHTTPProxyHandler(sc.Address).(*httpProxyHandler)
+		resp, err := h.DoControlRequest(sc.Request)
+		assert.Nil(t, err)
 
-		if resp.StatusCode != sc.ExpectCode {
-			t.Errorf("[%q] expected %v, got %v", sc.Name, sc.ExpectCode, resp.StatusCode)
+		task := &clustermessage.ControllerTaskResponse{}
+		err = proto.Unmarshal([]byte(resp), task)
+		if err != nil {
+			t.Errorf("unmarshal controller task response failed: %v", err)
 		}
+		assert.Equal(t, sc.ExpectCode, task.StatusCode)
 	}
 
 	errorcase := []struct {
 		Name    string
 		Address string
-		Request *pb.ShimRequest
+		Request *clustermessage.ClusterMessage
 	}{
 		{
 			Name:    "method not allowed",
 			Address: addr,
-			Request: &pb.ShimRequest{
-				Method: http.MethodPatch,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data5,
 			},
 		},
 		{
 			Name:    "address cannot reach",
 			Address: "127.0.0.1:1234",
-			Request: &pb.ShimRequest{
-				Method: http.MethodGet,
-				URL:    "/",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlReq,
+				},
+				Body: data1,
 			},
 		},
 	}
 	for _, ec := range errorcase {
-		h := NewHTTPProxyHandler(ec.Address)
-		_, err := h.Do(ec.Request)
-		if err == nil {
-			t.Errorf("[%q] expected error", ec.Name)
-		}
+		h := NewHTTPProxyHandler(ec.Address).(*httpProxyHandler)
+		_, err := h.DoControlRequest(ec.Request)
+		assert.NotNil(t, err)
 	}
+}
+
+func TestHTTPProxyHandlerDo(t *testing.T) {
+	initTestServer()
+	addr := testServer.Listener.Addr().String()
+
+	//unsupportable command
+	data := getControllerTask(http.MethodGet, t)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_NeighborRoute,
+		},
+		Body: data,
+	}
+
+	h := NewHTTPProxyHandler(addr)
+	resp, err := h.Do(msg)
+	assert.Nil(t, resp)
+	assert.NotNil(t, err)
 }

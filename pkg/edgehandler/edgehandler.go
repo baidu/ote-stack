@@ -153,37 +153,25 @@ func responseErrorStatus(err error) []byte {
 }
 
 func (e *edgeHandler) handleMessage(msg *clustermessage.ClusterMessage) error {
-	var status []byte
-
 	switch msg.Head.Command {
 	case clustermessage.CommandType_ControlReq:
-		// transfer to controller task
-		controllerTask := getControllerTaskFromClusterMessage(msg)
-		if controllerTask == nil {
-			return fmt.Errorf("get controller task failed")
-		}
-		// dispatch to target shim.
-		klog.V(1).Infof("dispatch message %v to %s", controllerTask, controllerTask.Destination)
-		req := controllerTask2Pb(msg, controllerTask)
-		resp, err := e.shimClient.Do(req)
+		klog.V(1).Infof("dispatch message %v to shim", msg.Head.MessageID)
+		resp, err := e.shimClient.Do(msg)
 		if resp != nil {
 			// sync return
 			if err != nil {
-				status = responseErrorStatus(err)
+				resp.Body = responseErrorStatus(err)
 				klog.Errorf("handleTask error: %s", err.Error())
-			} else {
-				_, status = pb2SerializedControllerTaskResp(resp)
 			}
 
-			// package response message.
-			returnMsg := proto.Clone(msg).(*clustermessage.ClusterMessage)
-			returnMsg.Head.Command = clustermessage.CommandType_ControlResp
-			returnMsg.Head.ClusterName = e.conf.ClusterName
-			returnMsg.Body = status
-
+			resp.Head.ClusterName = e.conf.ClusterName
 			// send to cloudtunnel.
-			err = e.sendToParent(returnMsg)
-		}
+			err = e.sendToParent(resp)
+		} else {
+			if err != nil {
+				klog.Errorf("handleTask error: %v", err)
+			}
+		}		
 		return err
 	default:
 		klog.Errorf("command %s is not supported by edge handler", msg.Head.Command.String())
@@ -205,21 +193,10 @@ func (e *edgeHandler) handleRespFromShimClient() {
 
 	for {
 		resp := <-respChan
-		messageHead, status := pb2SerializedControllerTaskResp(resp)
-
-		// package response message.
-		msg := &clustermessage.ClusterMessage{
-			Head: &clustermessage.MessageHead{
-				MessageID:         messageHead.MessageID,
-				ParentClusterName: messageHead.ParentClusterName,
-				Command:           clustermessage.CommandType_ControlResp,
-				ClusterName:       e.conf.ClusterName,
-			},
-			Body: status,
-		}
-
-		// send to cloudtunnel.
-		e.sendToParent(msg)
+		
+		resp.Head.ClusterName = e.conf.ClusterName
+        // send to cloudtunnel.
+		e.sendToParent(resp)
 	}
 	klog.Warningf("async return channel from shim client closed")
 }
@@ -249,16 +226,3 @@ func (e *edgeHandler) sendToParent(msg *clustermessage.ClusterMessage) error {
 	return nil
 }
 
-func getControllerTaskFromClusterMessage(
-	msg *clustermessage.ClusterMessage) *clustermessage.ControllerTask {
-	if msg == nil {
-		return nil
-	}
-	task := &clustermessage.ControllerTask{}
-	err := proto.Unmarshal([]byte(msg.Body), task)
-	if err != nil {
-		klog.Errorf("unmarshal controller task failed: %v", err)
-		return nil
-	}
-	return task
-}
