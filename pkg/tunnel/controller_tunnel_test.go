@@ -17,10 +17,53 @@ limitations under the License.
 package tunnel
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
+
+var (
+	testServerWillStop        *httptest.Server
+	testConnectionClosed      = false
+	testConnectionClosedCond  = sync.NewCond(&sync.Mutex{})
+	testConnectionOnce        = sync.Once{}
+	testConnectionGetMsgCount = 0
+)
+
+func initTestServerWillStop() {
+	testServerWillStop = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader = websocket.Upgrader{}
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		fmt.Println("connection established")
+		for {
+			_, _, err := c.ReadMessage()
+			if err != nil {
+				break
+			}
+			testConnectionGetMsgCount++
+			fmt.Printf("get a msg %d\n", testConnectionGetMsgCount)
+			testConnectionOnce.Do(func() {
+				fmt.Println("connection will be closed")
+				c.Close()
+				testConnectionClosed = true
+				testConnectionClosedCond.Signal()
+			})
+		}
+	}))
+}
 
 func newTestControllerTunnel() *controllerTunnel {
 	return &controllerTunnel{
@@ -85,4 +128,42 @@ func TestControllerTunnelHandleReceiveMessage(t *testing.T) {
 			t.Errorf("[%q] expected %v, got %v", ct.Name, ct.SendMsg, lastmsg)
 		}
 	}
+}
+
+func TestControllerTunnelInterface(t *testing.T) {
+	initTestServerWillStop()
+	testServerWillStop.Start()
+	// make a tunnel with 10 buffer size and 3 second reconnect interval, and connect it to server
+	ControllerSendChanBufferSize = 1
+	waitConnection = 1
+	tun := NewControllerTunnel(testServerWillStop.Listener.Addr().String()).(*controllerTunnel)
+	tun.Start()
+
+	// lock connection health cond
+	tun.connectionHealthCond.L.Lock()
+
+	// send msg to server with no block
+	sendChan := tun.SendChan()
+	sendChan <- clustermessage.ClusterMessage{}
+	go func() {
+		for i := 0; i != 10; i++ {
+			sendChan <- clustermessage.ClusterMessage{}
+		}
+	}()
+
+	testConnectionClosedCond.L.Lock()
+	for !testConnectionClosed {
+		testConnectionClosedCond.Wait()
+	}
+	testConnectionClosedCond.L.Unlock()
+
+	//sendChan <- clustermessage.ClusterMessage{}
+	time.Sleep(1 * time.Second)
+	assert.False(t, tun.connectionHealth)
+	// unlock to reconnect
+	tun.connectionHealthCond.L.Unlock()
+	// wait reconnect
+	time.Sleep(1 * time.Second)
+	// after reconnect
+	assert.True(t, tun.connectionHealth)
 }
