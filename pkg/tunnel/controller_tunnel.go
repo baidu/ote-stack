@@ -20,16 +20,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
+	proto "github.com/golang/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
-const (
-	ControllerSendChanBufferSize = 100
+var (
+	ControllerSendChanBufferSize = 1000
 )
 
 // ControllerTunnel is a iterface for controllerTunnel.
@@ -55,6 +57,9 @@ type controllerTunnel struct {
 	afterConnectToHook    AfterConnectToHook
 
 	sendChan chan clustermessage.ClusterMessage
+
+	connectionHealth     bool
+	connectionHealthCond *sync.Cond
 }
 
 // NewControllerTunnel returns a new controllerTunnel object.
@@ -68,6 +73,8 @@ func NewControllerTunnel(remoteAddr string) ControllerTunnel {
 		afterConnectToHook: func() {},
 		sendChan: make(chan clustermessage.ClusterMessage,
 			ControllerSendChanBufferSize),
+		connectionHealth:     false,
+		connectionHealthCond: sync.NewCond(&sync.Mutex{}),
 	}
 
 }
@@ -94,6 +101,7 @@ func (e *controllerTunnel) connect() error {
 	return nil
 }
 
+// TODO do sth if sends failed
 func (e *controllerTunnel) Send(msg []byte) error {
 	if e.wsclient == nil {
 		return fmt.Errorf("controller tunnel is not ready")
@@ -125,12 +133,19 @@ func (e *controllerTunnel) Stop() error {
 
 func (e *controllerTunnel) reconnect() {
 	for {
+		e.connectionHealthCond.L.Lock()
+		e.connectionHealth = false
 		if err := e.connect(); err != nil {
 			klog.Errorf("connect to %s failed, try again after %ds: %s",
 				e.cloudAddr, waitConnection, err.Error())
-			time.Sleep(waitConnection * time.Second)
+			e.connectionHealthCond.L.Unlock()
+			e.connectionHealthCond.Signal()
+			time.Sleep(time.Duration(waitConnection) * time.Second)
 			continue
 		}
+		e.connectionHealth = true
+		e.connectionHealthCond.L.Unlock()
+		e.connectionHealthCond.Signal()
 		break
 	}
 }
@@ -138,14 +153,15 @@ func (e *controllerTunnel) Start() error {
 	if err := e.connect(); err != nil {
 		return err
 	}
-
-	// TODO exit if name is duplicate.
+	e.connectionHealth = true
 	go func() {
+		// send from chan
+		go e.sendFromChan()
 		for {
-			// send from chan
-			go e.sendFromChan()
 			// read from websocket
 			e.handleReceiveMessage()
+
+			klog.Errorf("connection to %s failed, try to reconnect", e.cloudAddr)
 
 			e.wsclient.Close()
 			e.reconnect()
@@ -155,7 +171,47 @@ func (e *controllerTunnel) Start() error {
 }
 
 func (e *controllerTunnel) sendFromChan() {
-	// TODO get msg from sendChan and send it out
+	// get msg from sendChan and send it out
+	var msg clustermessage.ClusterMessage
+	for {
+		msg = <-e.sendChan
+		data, err := proto.Marshal(&msg)
+		if err != nil {
+			klog.Errorf("serialize cluster message(%v) failed: %v", msg, err)
+			continue
+		}
+		err = e.Send(data)
+		if err == nil {
+			continue
+		}
+		klog.Errorf("send msg failed: %v", err)
+		e.connectionHealth = false
+		err = e.recoverAndReSend(data)
+		if err != nil {
+			klog.Errorf("%v", err)
+		}
+	}
+}
+
+func (e *controllerTunnel) recoverAndReSend(resendData []byte) error {
+	// wait until connection recover or send channel is full
+	e.connectionHealthCond.L.Lock()
+	for !e.connectionHealth {
+		if len(e.sendChan) == ControllerSendChanBufferSize {
+			e.connectionHealthCond.L.Unlock()
+			return fmt.Errorf("send channel is full but connection is not health, throw the msg")
+		}
+		e.connectionHealthCond.Wait()
+	}
+	// resend msg if send error
+	err := e.Send(resendData)
+	if err == nil {
+		e.connectionHealthCond.L.Unlock()
+		return nil
+	}
+	e.connectionHealth = false
+	e.connectionHealthCond.L.Unlock()
+	return e.recoverAndReSend(resendData)
 }
 
 func (e *controllerTunnel) handleReceiveMessage() {

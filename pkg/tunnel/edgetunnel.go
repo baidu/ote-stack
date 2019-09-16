@@ -30,8 +30,8 @@ import (
 	"github.com/baidu/ote-stack/pkg/config"
 )
 
-const (
-	waitConnection   = 30
+var (
+	waitConnection   = 1
 	blacklistSeconds = 10
 )
 
@@ -69,7 +69,7 @@ func NewEdgeTunnel(conf *config.ClusterControllerConfig) EdgeTunnel {
 		cloudAddr:  conf.ParentCluster,
 		listenAddr: conf.TunnelListenAddr,
 		receiveMessageHandler: func(client string, msg []byte) error {
-			fmt.Println(string(msg))
+			klog.Info(string(msg))
 			return nil
 		},
 		afterConnectToHook: func() {},
@@ -137,7 +137,7 @@ func (e *edgeTunnel) reconnect() {
 				// wait and connect to current parent.
 				klog.Errorf("connect to %s failed, try again after %ds: %s",
 					e.cloudAddr, waitConnection, err.Error())
-				time.Sleep(waitConnection * time.Second)
+				time.Sleep(time.Duration(waitConnection) * time.Second)
 			}
 
 			// connect to new parent immediately.
@@ -245,7 +245,7 @@ func (c *CloudBlackList) Pop() string {
 	first := c.addrList.Front()
 	addr := first.Value.(string)
 	timeAdded := c.addrMap[addr]
-	if time.Since(timeAdded) <= blacklistSeconds*time.Second {
+	if time.Since(timeAdded) <= time.Duration(blacklistSeconds)*time.Second {
 		return ""
 	}
 	c.addrList.Remove(first)

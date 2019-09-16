@@ -618,6 +618,12 @@ func (c *clusterHandler) controllerMsgHandler(clientName string, data []byte) er
 		return ret
 	}
 
+	// check msg head
+	if msg.Head == nil {
+		err = fmt.Errorf("msg head is nil, cannot handle")
+		klog.Errorf("%v", err)
+		return err
+	}
 	// set parent cluster name
 	if msg.Head.ParentClusterName == "" {
 		msg.Head.ParentClusterName = c.conf.ClusterName

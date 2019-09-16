@@ -254,6 +254,12 @@ func TestControllerMsgHandler(t *testing.T) {
 	assert.Nil(t, err)
 	msgFromChan := <-c.conf.EdgeToClusterChan
 	assert.Equal(t, c.conf.ClusterName, msgFromChan.Head.ParentClusterName)
+	// msg unmarshal success but with nil head
+	msg = &clustermessage.ClusterMessage{}
+	ccbytes, err = proto.Marshal(msg)
+	assert.Nil(t, err)
+	err = c.controllerMsgHandler("c1", ccbytes)
+	assert.NotNil(t, err)
 }
 
 type fakeCloudTunnel struct {
