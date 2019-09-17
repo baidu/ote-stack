@@ -39,15 +39,9 @@ func NewK8sHandler(cl oteclient.Interface) Handler {
 func (k *k8sHandler) Do(in *pb.ShimRequest) (*pb.ShimResponse, error) {
 
 	var req *rest.Request
-	switch method := in.Method; method {
-	case http.MethodGet:
-		req = k.restclient.Get()
-	case http.MethodPost:
-		req = k.restclient.Post()
-	case http.MethodDelete:
-		req = k.restclient.Delete()
-	case http.MethodPut:
-		req = k.restclient.Put()
+	switch in.Method {
+	case http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut:
+		req = k.restclient.Verb(in.Method)
 	case http.MethodPatch:
 		req = k.restclient.Patch(types.JSONPatchType)
 	default:
