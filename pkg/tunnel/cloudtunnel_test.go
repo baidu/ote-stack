@@ -63,7 +63,7 @@ func TestFindAController(t *testing.T) {
 }
 
 func TestListenedCloudTunnel(t *testing.T) {
-	addr := ":34521"
+	addr := ""
 	clientName := "c1"
 	u, err := url.Parse(fmt.Sprintf("ws://%s%s%s", addr, accessURI, clientName))
 	header := http.Header{}

@@ -104,12 +104,14 @@ func Run() error {
 
 	// connect to root clustercontroller
 	controllerTunnel := tunnel.NewControllerTunnel(rootClusterControllerAddr)
+	ctx := createControllerContext(oteClient, k8sClient)
+	upstreamProcessor := controllermanager.NewUpstreamProcessor(&ctx.K8sContext)
+	controllerTunnel.RegistReceiveMessageHandler(upstreamProcessor.HandleReceivedMessage)
 	err = controllerTunnel.Start()
 	if err != nil {
 		return err
 	}
 	run := func(c context.Context) {
-		ctx := createControllerContext(oteClient, k8sClient)
 		// start all controllers
 		ctx.PublishChan = controllerTunnel.SendChan()
 		err = startControllers(ctx)
@@ -169,10 +171,12 @@ func createControllerContext(oteClient oteclient.Interface,
 	oteSharedInformers := oteinformer.NewSharedInformerFactory(oteClient, informerDuration)
 	sharedInformers := informers.NewSharedInformerFactory(k8sClient, informerDuration)
 	return &controllermanager.ControllerContext{
-		OteClient:          oteClient,
-		OteInformerFactory: oteSharedInformers,
-		K8sClient:          k8sClient,
-		InformerFactory:    sharedInformers,
+		K8sContext: controllermanager.K8sContext{
+			OteClient:          oteClient,
+			OteInformerFactory: oteSharedInformers,
+			K8sClient:          k8sClient,
+			InformerFactory:    sharedInformers,
+		},
 	}
 }
 

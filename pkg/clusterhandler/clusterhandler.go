@@ -303,8 +303,15 @@ func (c *clusterHandler) checkClusterName(cr *config.ClusterRegistry) bool {
 		return false
 	}
 
-	// handle a cluster regist message
-	go c.handleRegistClusterMessage(cr.Name, cc)
+	data, err := cc.Serialize()
+	if err != nil {
+		klog.Error(err)
+		return false
+	}
+
+	// send to handler
+	go c.handleMessageFromChild(cr.Name, data)
+
 	return true
 }
 
@@ -466,7 +473,14 @@ func (c *clusterHandler) closeChild(cr *config.ClusterRegistry) {
 		klog.Errorf("wrapper message for close child failed: %v", err)
 		return
 	}
-	go c.handleUnregistClusterMessage(cr.Name, cc)
+	data, err := cc.Serialize()
+	if err != nil {
+		klog.Error(err)
+		return
+	}
+
+	// send to handler
+	go c.handleMessageFromChild(cr.Name, data)
 }
 
 /*
