@@ -14,13 +14,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package reporter collects edge resource status and reports it to controller manager.
 package reporter
 
 import (
 	"k8s.io/client-go/informers"
+	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
+
+const (
+	ResourceTypeNode = iota
+	ResourceTypePod
+	ResourceTypeDeployment
+	ResourceTypeDaemonset
+	ResourceTypeService
+	ResourceTypeStatefulset
+	ResourceTypeClusterStatus
+	ResourceTypeEvent
+
+	ClusterLabel = "ote-cluster"
+)
+
+//Report defines edge report content.
+type Report struct {
+	ResourceType int            `json:"resourceType"`
+	Body         ResourceStatus `json:"body"`
+}
+
+// ResourceStatus contains resource status.
+type ResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]interface{} `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]interface{} `json:"delMap"`
+	// FullVolumeList stores full volume resource obj.
+	FullVolumeList []interface{} `json:"fullVolumeList"`
+}
 
 // ReporterContext defines the context object for reporter.
 type ReporterContext struct {
@@ -37,11 +68,33 @@ type ReporterContext struct {
 // InitFunc is used to launch a particular reporter.
 type InitFunc func(ctx *ReporterContext) error
 
-// NewReporterInitializers returns a public map of named reporter groups
-// paired to their InitFunc.
+// NewReporterInitializers returns a public map of named reporter groups paired to their InitFunc.
 func NewReporterInitializers() map[string]InitFunc {
 	reporters := map[string]InitFunc{}
 	// TODO initialize reporter instance
-	// reporters["nodeReporter"] = startNodeReporter
+
+	reporters["podReporter"] = startPodReporter
 	return reporters
+}
+
+// IsValid returns the ReporterContext validation result.
+func (ctx *ReporterContext) IsValid() bool {
+	if ctx == nil {
+		klog.Errorf("Failed to create new reporter, ctx is nil")
+		return false
+	}
+	if ctx.InformerFactory == nil {
+		klog.Errorf("Failed to create new reporter, InformerFactory is nil")
+		return false
+	}
+	if ctx.SyncChan == nil {
+		klog.Errorf("Failed to create new reporter, SyncChan is nil")
+		return false
+	}
+	if ctx.StopChan == nil {
+		klog.Errorf("Failed to create new reporter, StopChan is nil")
+		return false
+	}
+
+	return true
 }
