@@ -34,11 +34,7 @@ var (
 // ControllerContext is the context needed by all controllers.
 // ControllerContext woubld be a param when start a controller.
 type ControllerContext struct {
-	OteClient          oteclient.Interface
-	OteInformerFactory oteinformer.SharedInformerFactory
-
-	K8sClient       kubernetes.Interface
-	InformerFactory informers.SharedInformerFactory
+	K8sContext
 
 	// a channel to publish msg to root cluster controller
 	PublishChan chan clustermessage.ClusterMessage
@@ -48,3 +44,12 @@ type ControllerContext struct {
 
 // InitFunc is the function to start a controller within a context.
 type InitFunc func(ctx *ControllerContext) error
+
+// K8sContext is the context of all object related to k8s.
+type K8sContext struct {
+	OteClient          oteclient.Interface
+	OteInformerFactory oteinformer.SharedInformerFactory
+
+	K8sClient       kubernetes.Interface
+	InformerFactory informers.SharedInformerFactory
+}
