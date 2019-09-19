@@ -72,3 +72,17 @@ func GetControllerTaskFromClusterMessage(
 	}
 	return task
 }
+
+func GetControlMultiTaskFromClusterMessage(
+	msg *clustermessage.ClusterMessage) *clustermessage.ControlMultiTask {
+	if msg == nil {
+		return nil
+	}
+	task := &clustermessage.ControlMultiTask{}
+	err := proto.Unmarshal([]byte(msg.Body), task)
+	if err != nil {
+		klog.Errorf("unmarshal ControlMultiTask failed: %v", err)
+		return nil
+	}
+	return task
+}

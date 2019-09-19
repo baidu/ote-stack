@@ -223,7 +223,7 @@ func TestSendMessageToTunnel(t *testing.T) {
 	}
 
 	controllerAPITask := &clustermessage.ControllerTask{
-		Destination: "api",
+		Destination: otev1.ClusterControllerDestAPI,
 	}
 	controllerAPITaskData, err := proto.Marshal(controllerAPITask)
 	assert.Nil(t, err)
@@ -274,7 +274,7 @@ func TestReceiveMessageFromTunnel(t *testing.T) {
 	}
 
 	controllerAPITask := &clustermessage.ControllerTask{
-		Destination: "api",
+		Destination: otev1.ClusterControllerDestAPI,
 	}
 	controllerAPITaskData, err := proto.Marshal(controllerAPITask)
 	assert.Nil(t, err)
@@ -392,4 +392,20 @@ func TestHandleMessage(t *testing.T) {
 		assert.Equal(t, ct.ExpectHandle, ok)
 	}
 
+	controllerAPITask := &clustermessage.ControlMultiTask{
+		Destination: otev1.ClusterControllerDestAPI,
+	}
+	controllerAPITaskData, err := proto.Marshal(controllerAPITask)
+	assert.Nil(t, err)
+	assert.NotNil(t, controllerAPITaskData)
+
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			ParentClusterName: "root",
+			Command:           clustermessage.CommandType_ControlMultiReq,
+		},
+		Body:	controllerAPITaskData,
+	}
+	err = edge.handleMessage(msg)
+	assert.Nil(t, err)
 }

@@ -30,11 +30,15 @@ import (
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 )
 
+var (
+	DestNoHandler = "nohandler"
+)
+
 func fakeNewlocalShimClient(c *config.ClusterControllerConfig) ShimServiceClient {
 	local := &localShimClient{
 		handlers: make(map[string]handler.Handler),
 	}
-	local.handlers["api"] = &fakeShimHandler{}
+	local.handlers[otev1.ClusterControllerDestAPI] = &fakeShimHandler{}
 	local.handlers[otev1.ClusterControllerDestHelm] = handler.NewHTTPProxyHandler(c.HelmTillerAddr)
 	return local
 }
@@ -44,6 +48,18 @@ func getControllerTask(des string, method string, uri string, t *testing.T) []by
 		Destination: des,
 		Method:      method,
 		URI:         uri,
+	}
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		t.Errorf("to controller task request failed: %v", err)
+		return nil
+	}
+	return data
+}
+
+func makeControlMultiTask(des string, t *testing.T) []byte {
+	msg := &clustermessage.ControlMultiTask{
+		Destination: des,
 	}
 	data, err := proto.Marshal(msg)
 	if err != nil {
@@ -68,10 +84,9 @@ func TestShimClientDoControlRequest(t *testing.T) {
 	assert.Nil(t, localClient.ReturnChan())
 
 	//supportable handler
-	des := "api"
 	method := "GET"
 	uri := "/apis/ote.baidu.com/v1/namespaces/default/clusters"
-	data1 := getControllerTask(des, method, uri, t)
+	data1 := getControllerTask(otev1.ClusterControllerDestAPI, method, uri, t)
 	msg1 := clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{
 			ParentClusterName:     "c1",
@@ -84,9 +99,7 @@ func TestShimClientDoControlRequest(t *testing.T) {
 	assert.Equal(t, clustermessage.CommandType_ControlResp, resp.Head.Command) // local shim client return not nil resp
 
 	// unsupportable handler
-	des = "nohandler"
-	data2 := getControllerTask(des, method, uri, t)
-	
+	data2 := getControllerTask(DestNoHandler, method, uri, t)
 	msg2 := clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{
 			ParentClusterName:     "c1",
@@ -100,8 +113,7 @@ func TestShimClientDoControlRequest(t *testing.T) {
 	assert.NotNil(t, err)
 
 	//unsupportable command
-	des = "api"
-	data3 := getControllerTask(des, method, uri, t)
+	data3 := getControllerTask(otev1.ClusterControllerDestAPI, method, uri, t)
 	msg3 := clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{
 			ParentClusterName:     "c1",
@@ -112,6 +124,53 @@ func TestShimClientDoControlRequest(t *testing.T) {
 	}
 	resp, err = localClient.DoControlRequest(&msg3)
 	assert.Nil(t, resp) // local shim client return nil resp
+	assert.NotNil(t, err)
+}
+
+func TestShimClientDoControlMultiRequest(t *testing.T){
+	c := &config.ClusterControllerConfig{
+		K8sClient: oteclient.NewSimpleClientset(
+			&otev1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "c1",
+				},
+			},
+		),
+		HelmTillerAddr: "",
+	}
+	localClient := fakeNewlocalShimClient(c).(*localShimClient)
+	assert.Nil(t, localClient.ReturnChan())
+
+	//supportable handler
+	data1 := makeControlMultiTask(otev1.ClusterControllerDestAPI, t)
+	msg1 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command:	clustermessage.CommandType_ControlMultiReq,
+		},
+		Body: data1,
+	}
+	err := localClient.DoControlMultiRequest(&msg1)
+	assert.Nil(t, err)
+
+	//unsupportable handler
+	data2 := makeControlMultiTask(DestNoHandler, t)
+	msg2 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command:	clustermessage.CommandType_ControlMultiReq,
+		},
+		Body: data2,
+	}
+	err = localClient.DoControlMultiRequest(&msg2)
+	assert.NotNil(t, err)
+
+	//unsupportable command
+	msg3 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command:	clustermessage.CommandType_NeighborRoute,
+		},
+		Body: data1,
+	}
+	err = localClient.DoControlMultiRequest(&msg3)
 	assert.NotNil(t, err)
 }
 

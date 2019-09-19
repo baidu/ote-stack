@@ -86,6 +86,8 @@ func (s *localShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage
 	switch in.Head.Command {
 	case clustermessage.CommandType_ControlReq:
 		return s.DoControlRequest(in)
+	case clustermessage.CommandType_ControlMultiReq:
+		return nil, s.DoControlMultiRequest(in)
 	default:
 		return nil, fmt.Errorf("command %s is not supported by ShimClient", in.Head.Command.String())
 	}
@@ -112,6 +114,21 @@ func (s *localShimClient) DoControlRequest(in *clustermessage.ClusterMessage) (*
 
 	resp := handler.ControlTaskResponse(http.StatusNotFound, "")
 	return handler.Response(resp, head), fmt.Errorf("no handler for %s", controllerTask.Destination)
+}
+
+func (s *localShimClient) DoControlMultiRequest(in *clustermessage.ClusterMessage) error {
+	controlMultiTask := handler.GetControlMultiTaskFromClusterMessage(in)
+	if controlMultiTask == nil {
+		return fmt.Errorf("ControlMultiTask Not Found")
+	}
+
+	h, exist := s.handlers[controlMultiTask.Destination]
+	if exist {
+		_, err := h.Do(in)
+		return err
+	}
+
+	return fmt.Errorf("no handler for %s", controlMultiTask.Destination)
 }
 
 func (s *localShimClient) ReturnChan() <-chan *clustermessage.ClusterMessage {

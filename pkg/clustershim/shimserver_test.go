@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 
+	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
@@ -59,6 +60,8 @@ func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage
 			Body: data,
 		}
 		return msg, nil
+	case clustermessage.CommandType_ControlMultiReq:
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("command %s is not supported by ShimClient", in.Head.Command.String())
 	}
@@ -66,10 +69,10 @@ func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage
 
 func TestDo(t *testing.T) {
 	server := NewShimServer()
-	server.RegisterHandler("api", &fakeShimHandler{})
+	server.RegisterHandler(otev1.ClusterControllerDestAPI, &fakeShimHandler{})
 
 	//unsupportable command
-	data1 := getControllerTask("api", "", "", t)
+	data1 := getControllerTask(otev1.ClusterControllerDestAPI, "", "", t)
 
 	msg := &clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{
@@ -85,9 +88,9 @@ func TestDo(t *testing.T) {
 
 func TestDoControlRequest(t *testing.T) {
 	server := NewShimServer()
-	server.RegisterHandler("api", &fakeShimHandler{})
+	server.RegisterHandler(otev1.ClusterControllerDestAPI, &fakeShimHandler{})
 
-	data1 := getControllerTask("api", "", "", t)
+	data1 := getControllerTask(otev1.ClusterControllerDestAPI, "", "", t)
 
 	successcase := []struct {
 		Name       string
@@ -153,7 +156,6 @@ func TestDoControlRequest(t *testing.T) {
 			assert.NotNil(t, resp)
 		}
 	}
-
 }
 
 func newTestWSClient(s *http.Server, name string) *tunnel.WSClient {
@@ -269,4 +271,41 @@ func TestMain(m *testing.M) {
 	exit := m.Run()
 	testShimServer.Close()
 	os.Exit(exit)
+}
+
+func TestDoControlMultiRequest(t *testing.T) {
+	server := NewShimServer()
+	server.RegisterHandler(otev1.ClusterControllerDestAPI, &fakeShimHandler{})
+
+	//supportable handler
+	data1 := makeControlMultiTask(otev1.ClusterControllerDestAPI, t)
+	msg1 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_ControlMultiReq,
+		},
+		Body: data1,
+	}
+	err := server.DoControlMultiRequest(&msg1)
+	assert.Nil(t, err)
+
+	//unsupportable handler
+	data2 := makeControlMultiTask(DestNoHandler, t)
+	msg2 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_ControlMultiReq,
+		},
+		Body: data2,
+	}
+	err = server.DoControlMultiRequest(&msg2)
+	assert.NotNil(t, err)
+
+	//unsupportable command
+	msg3 := clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_NeighborRoute,
+		},
+		Body: data1,
+	}
+	err = server.DoControlMultiRequest(&msg3)
+	assert.NotNil(t, err)
 }

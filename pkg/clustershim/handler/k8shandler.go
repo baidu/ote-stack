@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
@@ -41,6 +42,9 @@ func (k *k8sHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.Clus
 	case clustermessage.CommandType_ControlReq:
 		resp, err := k.DoControlRequest(in)
 		return Response(resp, in.Head), err
+	case clustermessage.CommandType_ControlMultiReq:
+		err := k.DoControlMultiRequest(in)
+		return nil, err
 	default:
 		return nil, fmt.Errorf("command %s is not supported by k8sHandler", in.Head.Command.String())
 	}
@@ -74,4 +78,43 @@ func (k *k8sHandler) DoControlRequest(in *clustermessage.ClusterMessage) ([]byte
 	raw, _ := result.Raw()
 
 	return ControlTaskResponse(code, string(raw)), nil
+}
+
+func (k *k8sHandler) DoControlMultiRequest(in *clustermessage.ClusterMessage) error {
+	var request *rest.Request
+	var result rest.Result
+
+	controlMultiTask := GetControlMultiTaskFromClusterMessage(in)
+	if controlMultiTask == nil {
+		return fmt.Errorf("ControlMultiTask Not Found")
+	}
+
+	switch controlMultiTask.Method {
+	case http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut:
+		request = k.restclient.Verb(controlMultiTask.Method)
+	case http.MethodPatch:
+		request = k.restclient.Patch(types.JSONPatchType)
+	default:
+		return fmt.Errorf("method not allowed")
+	}
+
+	request.RequestURI(controlMultiTask.URI)
+
+	for _, item := range controlMultiTask.Body {
+		req := *request
+		req.Body([]byte(item))
+
+		result = req.Do()
+		raw, err := result.Raw()
+
+		if err != nil {
+			klog.Errorf("Do k8s request failed: %v", err)
+			//TODO should do request again
+		}
+		if raw != nil {
+			klog.V(3).Infof("the response of k8s request is: %v", string(raw))
+		}
+	}
+
+	return nil
 }
