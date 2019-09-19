@@ -73,6 +73,8 @@ func (s *ShimServer) Do(in *clustermessage.ClusterMessage) (*clustermessage.Clus
 	switch in.Head.Command {
 	case clustermessage.CommandType_ControlReq:
 		return s.DoControlRequest(in)
+	case clustermessage.CommandType_ControlMultiReq:
+		return nil, s.DoControlMultiRequest(in)
 	default:
 		return nil, fmt.Errorf("command %s is not supported by ShimServer", in.Head.Command.String())
 	}
@@ -105,6 +107,25 @@ func (s *ShimServer) DoControlRequest(in *clustermessage.ClusterMessage) (*clust
 	klog.Infof("no handler for %v", controllerTask.Destination)
 	resp := handler.ControlTaskResponse(http.StatusNotFound, "")
 	return handler.Response(resp, head), fmt.Errorf("Not Found")
+}
+
+func (s *ShimServer) DoControlMultiRequest(in *clustermessage.ClusterMessage) error {
+	controlMultiTask := handler.GetControlMultiTaskFromClusterMessage(in)
+	if controlMultiTask == nil {
+		return fmt.Errorf("ControlMultiTask Not Found")
+	}
+
+	h, exist := s.handlers[controlMultiTask.Destination]
+	if exist {
+		_, err := h.Do(in)
+		if err != nil {
+			klog.Errorf("handle request error: %v", err)
+		}
+		return err
+	}
+
+	klog.Infof("no handler for %v", controlMultiTask.Destination)
+	return fmt.Errorf("no handler for %s", controlMultiTask.Destination)
 }
 
 func (s *ShimServer) do(w http.ResponseWriter, r *http.Request) {
@@ -164,12 +185,11 @@ func (s *ShimServer) handleReadMessage(msg []byte) {
 	}
 
 	resp, err := s.Do(&in)
-	if resp == nil {
-		klog.Errorf("execute shim request failed!")
-		return
-	}
 	if err != nil {
 		klog.Errorf("execute shim request failed: %v", err)
+	}
+	if resp == nil {
+		return
 	}
 	respMsg, err := proto.Marshal(resp)
 	if err != nil {

@@ -173,6 +173,13 @@ func (e *edgeHandler) handleMessage(msg *clustermessage.ClusterMessage) error {
 			}
 		}		
 		return err
+	case clustermessage.CommandType_ControlMultiReq:
+		klog.V(3).Infof("dispatch ControlMultiReq message to shim")
+		_, err := e.shimClient.Do(msg)
+		if err != nil {
+			klog.Errorf("handleTask error: %s", err.Error())
+		}
+		return err
 	default:
 		klog.Errorf("command %s is not supported by edge handler", msg.Head.Command.String())
 		return nil

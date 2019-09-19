@@ -36,3 +36,25 @@ func TestControlTaskResponse(t *testing.T) {
 	resp := ControlTaskResponse(200, "")
 	assert.NotNil(t, resp)
 }
+
+func TestGetControllerTask(t *testing.T) {
+	ret := GetControllerTaskFromClusterMessage(nil)
+	assert.Nil(t, ret)
+
+	msg := &clustermessage.ClusterMessage{
+		Body:	[]byte{1},
+	}
+	ret = GetControllerTaskFromClusterMessage(msg)
+	assert.Nil(t, ret)
+}
+
+func TestGetControlMultiTask(t *testing.T) {
+	ret := GetControlMultiTaskFromClusterMessage(nil)
+	assert.Nil(t, ret)
+
+	msg := &clustermessage.ClusterMessage{
+		Body:	[]byte{1},
+	}
+	ret = GetControlMultiTaskFromClusterMessage(msg)
+	assert.Nil(t, ret)
+}

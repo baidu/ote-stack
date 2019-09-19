@@ -13,6 +13,7 @@ enum CommandType {
     ControlReq = 7;
     ControlResp = 8;
     EdgeReport = 9; // shim report edge status to cloud
+    ControlMultiReq = 10; //send multiple controller requests
 }
 
 // ClusterMessage is the message between cluster controllers and maybe cc and cluster shim.
@@ -48,4 +49,11 @@ message DeployTask {
     int32 Replicas = 1;
     map<string, string> PodParams = 2;
     string Status = 3;
+}
+
+message ControlMultiTask {
+    string Destination = 1;
+    string Method = 2;
+    string URI = 3;
+    repeated bytes Body = 4;
 }

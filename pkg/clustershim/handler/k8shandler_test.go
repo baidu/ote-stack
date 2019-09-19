@@ -32,6 +32,20 @@ import (
 	//	fakek8s "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 )
 
+func makeControlMultiTask(method string, t *testing.T) []byte {
+	msg := &clustermessage.ControlMultiTask{
+		Method: method,
+		URI:    "/",
+		Body:	[][]byte{{1},{2}},
+	}
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		t.Errorf("to controller task request failed: %v", err)
+		return nil
+	}
+	return data	
+}
+
 func TestK8sHandlerDo(t *testing.T) {
 	fakeRestClient := &fakerest.RESTClient{
 		Client: fakerest.CreateHTTPClient(
@@ -168,6 +182,104 @@ func TestK8sHandlerDoControlRequest(t *testing.T) {
 	}
 	for _, ec := range errorcase {
 		_, err := h.DoControlRequest(ec.Request)
+		assert.NotNil(t, err)
+	}
+}
+
+func TestDoControlMultiRequest(t *testing.T) {
+	fakeRestClient := &fakerest.RESTClient{
+		Client: fakerest.CreateHTTPClient(
+			func(req *http.Request) (*http.Response, error) {
+				body := "HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nOK\n"
+				resp, _ := http.ReadResponse(bufio.NewReader(strings.NewReader(body)), req)
+				return resp, nil
+			},
+		),
+		GroupVersion:         v1.SchemeGroupVersion,
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		VersionedAPIPath:     "/",
+	}
+	h := &k8sHandler{restclient: fakeRestClient}
+
+	data1 := makeControlMultiTask(http.MethodGet, t)
+	data2 := makeControlMultiTask(http.MethodPost, t)
+	data3 := makeControlMultiTask(http.MethodPut, t)
+	data4 := makeControlMultiTask(http.MethodDelete, t)
+	data5 := makeControlMultiTask(http.MethodPatch, t)
+
+	successcase := []struct {
+		Name       string
+		Request    *clustermessage.ClusterMessage
+	}{
+		{
+			Name: "method Get",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data1,
+			},
+		},
+		{
+			Name: "method Post",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data2,
+			},
+		},
+		{
+			Name: "method PUT",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data3,
+			},
+		},
+		{
+			Name: "method DELETE",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data4,
+			},
+		},
+		{
+			Name: "method PATCH",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data5,
+			},
+		},
+	}
+
+	for _, sc := range successcase {
+		err := h.DoControlMultiRequest(sc.Request)
+		assert.Nil(t, err)
+	}
+
+	data6 := makeControlMultiTask("", t)
+	errorcase := []struct {
+		Name    string
+		Request *clustermessage.ClusterMessage
+	}{
+		{
+			Name: "no method",
+			Request: &clustermessage.ClusterMessage{
+				Head: &clustermessage.MessageHead{
+					Command: clustermessage.CommandType_ControlMultiReq,
+				},
+				Body: data6,
+			},
+		},
+	}
+	for _, ec := range errorcase {
+		err := h.DoControlMultiRequest(ec.Request)
 		assert.NotNil(t, err)
 	}
 }
