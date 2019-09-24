@@ -20,6 +20,7 @@ package clustershim
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 
@@ -197,9 +198,15 @@ func (s *ShimServer) Serve(addr string) error {
 	}
 
 	klog.Infof("listen on %s", addr)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	s.server.Addr = ln.Addr().String()
 	stop := make(chan struct{})
 	go s.writeMessage(stop)
-	if err := s.server.ListenAndServe(); err != nil {
+
+	if err := s.server.Serve(ln); err != nil {
 		klog.Errorf("fail to start shimserver: %s", err.Error())
 	}
 

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -301,8 +302,13 @@ func (t *cloudTunnel) Start() error {
 	// add handler for ote controller manager
 	router.HandleFunc(controllerURI, t.controllerHandler)
 
+	ln, err := net.Listen("tcp", t.address)
+	if err != nil {
+		return err
+	}
+
 	t.server = &http.Server{
-		Addr:         fmt.Sprintf("%s", t.address),
+		Addr:         ln.Addr().String(),
 		Handler:      router,
 		WriteTimeout: WriteTimeout,
 		ReadTimeout:  ReadTimeout,
@@ -310,7 +316,7 @@ func (t *cloudTunnel) Start() error {
 	}
 
 	go func() {
-		if err := t.server.ListenAndServe(); err != nil {
+		if err := t.server.Serve(ln); err != nil {
 			klog.Fatalf("fail to start cloudtunnel: %s", err.Error())
 		}
 	}()

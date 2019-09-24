@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/gorilla/websocket"
@@ -100,6 +101,7 @@ func TestReadMessage(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	initTestServer()
-	m.Run()
+	exit := m.Run()
 	testServer.Close()
+	os.Exit(exit)
 }
