@@ -63,16 +63,16 @@ func TestFindAController(t *testing.T) {
 }
 
 func TestListenedCloudTunnel(t *testing.T) {
-	addr := ""
+	ctInter := NewCloudTunnel("")
+	ct := ctInter.(*cloudTunnel)
+	err := ct.Start()
+	addr := ct.server.Addr
 	clientName := "c1"
 	u, err := url.Parse(fmt.Sprintf("ws://%s%s%s", addr, accessURI, clientName))
 	header := http.Header{}
 	header.Add(config.ClusterConnectHeaderListenAddr, "fake")
 	header.Add(config.ClusterConnectHeaderUserDefineName, clientName)
 	assert.Nil(t, err)
-	ctInter := NewCloudTunnel(addr)
-	ct := ctInter.(*cloudTunnel)
-	err = ct.Start()
 	// wait listen
 	time.Sleep(1 * time.Second)
 	assert.Nil(t, err)

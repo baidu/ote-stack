@@ -145,9 +145,15 @@ func TestControllerTunnelInterface(t *testing.T) {
 	// send msg to server with no block
 	sendChan := tun.SendChan()
 	sendChan <- clustermessage.ClusterMessage{}
+	stopChan := make(chan struct{})
 	go func() {
-		for i := 0; i != 10; i++ {
-			sendChan <- clustermessage.ClusterMessage{}
+		for {
+			select {
+			case <-stopChan:
+				break
+			default:
+				sendChan <- clustermessage.ClusterMessage{}
+			}
 		}
 	}()
 
@@ -157,11 +163,11 @@ func TestControllerTunnelInterface(t *testing.T) {
 	}
 	testConnectionClosedCond.L.Unlock()
 
-	//sendChan <- clustermessage.ClusterMessage{}
 	time.Sleep(1 * time.Second)
 	assert.False(t, tun.connectionHealth)
 	// unlock to reconnect
 	tun.connectionHealthCond.L.Unlock()
+	close(stopChan)
 	// wait reconnect
 	time.Sleep(1 * time.Second)
 	// after reconnect

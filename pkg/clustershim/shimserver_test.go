@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -172,10 +173,7 @@ func newTestWSClient(s *http.Server, name string) *tunnel.WSClient {
 func TestClusterName(t *testing.T) {
 	expectName := "test"
 	ccclient := newTestWSClient(testShimServer.server, expectName)
-	if ccclient == nil {
-		t.Errorf("cclient unexpected nil")
-		return
-	}
+	assert.NotNil(t, ccclient)
 
 	if testShimServer.ccclient == nil {
 		t.Errorf("testShimServer.ccclient unexpected nil")
@@ -266,8 +264,9 @@ func TestWriteMessage(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	testShimServer = NewShimServer()
-	go testShimServer.Serve("127.0.0.1:10456")
+	go testShimServer.Serve("")
 	time.Sleep(time.Second * 1)
-	m.Run()
+	exit := m.Run()
 	testShimServer.Close()
+	os.Exit(exit)
 }
