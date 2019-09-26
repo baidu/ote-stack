@@ -38,6 +38,7 @@ import (
 	oteinformer "github.com/baidu/ote-stack/pkg/generated/informers/externalversions"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/tunnel"
+	"github.com/baidu/ote-stack/pkg/controller/clustercrd"
 )
 
 const (
@@ -52,6 +53,9 @@ const (
 var (
 	kubeConfig                string
 	rootClusterControllerAddr string
+	Controllers = map[string]controllermanager.InitFunc{
+		"clustercrd": clustercrd.InitClusterCrdController,
+	}
 )
 
 // NewOTEControllerManagerCommand creates a *cobra.Command object with default parameters.
@@ -114,6 +118,7 @@ func Run() error {
 	run := func(c context.Context) {
 		// start all controllers
 		ctx.PublishChan = controllerTunnel.SendChan()
+		ctx.StopChan = c.Done()
 		err = startControllers(ctx)
 		if err != nil {
 			klog.Fatalf("start controllers failed: %v", err)
@@ -181,7 +186,7 @@ func createControllerContext(oteClient oteclient.Interface,
 }
 
 func startControllers(ctx *controllermanager.ControllerContext) error {
-	for controllerName, initFn := range controllermanager.Controllers {
+	for controllerName, initFn := range Controllers {
 		err := initFn(ctx)
 		if err != nil {
 			klog.Errorf("init %s controller failed: %v", controllerName, err)
@@ -190,5 +195,6 @@ func startControllers(ctx *controllermanager.ControllerContext) error {
 
 		klog.Infof("start controller %s", controllerName)
 	}
+	ctx.OteInformerFactory.Start(ctx.StopChan)
 	return nil
 }
