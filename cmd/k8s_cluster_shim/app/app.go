@@ -97,11 +97,14 @@ func Run() error {
 	// TODO directly connect helm tiller.
 	s.RegisterHandler(otev1.ClusterControllerDestHelm, handler.NewHTTPProxyHandler(helmConfig))
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	reporterContext := &reporter.ReporterContext{
 		InformerFactory: informers.NewSharedInformerFactory(k8sClient, informerDuration),
 		ClusterName:     s.ClusterName,
 		SyncChan:        s.SendChan(),
-		StopChan:        context.TODO().Done(),
+		StopChan:        ctx.Done(), 
 	}
 
 	err = startReporters(reporterContext)

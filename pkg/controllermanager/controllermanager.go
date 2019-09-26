@@ -26,11 +26,6 @@ import (
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
-var (
-	// TODO add controllers here
-	Controllers = map[string]InitFunc{}
-)
-
 // ControllerContext is the context needed by all controllers.
 // ControllerContext woubld be a param when start a controller.
 type ControllerContext struct {
@@ -40,6 +35,8 @@ type ControllerContext struct {
 	PublishChan chan clustermessage.ClusterMessage
 	// a tunnel connected to root cluster controller
 	controllerTunnel tunnel.ControllerTunnel
+	//StopChan is the stop channel
+	StopChan <-chan struct{}
 }
 
 // InitFunc is the function to start a controller within a context.
