@@ -18,6 +18,7 @@ limitations under the License.
 package reporter
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/klog"
 
@@ -25,7 +26,7 @@ import (
 )
 
 const (
-	ResourceTypeNode = iota
+	ResourceTypeNode = iota + 1
 	ResourceTypePod
 	ResourceTypeDeployment
 	ResourceTypeDaemonset
@@ -39,19 +40,32 @@ const (
 
 //Report defines edge report content.
 type Report struct {
-	ResourceType int            `json:"resourceType"`
-	Body         ResourceStatus `json:"body"`
+	ResourceType int `json:"resourceType"`
+	// Body defines different resource status.
+	Body []byte `json:"body"`
 }
 
-// ResourceStatus contains resource status.
-type ResourceStatus struct {
+// PodResourceStatus defines pod resource status.
+type PodResourceStatus struct {
 	// UpdateMap stores created/updated resource obj.
-	UpdateMap map[string]interface{} `json:"updateMap"`
+	UpdateMap map[string]*corev1.Pod `json:"updateMap"`
 	// DelMap stores deleted resource obj.
-	DelMap map[string]interface{} `json:"delMap"`
-	// FullVolumeList stores full volume resource obj.
-	FullVolumeList []interface{} `json:"fullVolumeList"`
+	DelMap map[string]*corev1.Pod `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*corev1.Pod `json:"fullList"`
 }
+
+// NodeResourceStatus defines node resource status.
+type NodeResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]*corev1.Node `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]*corev1.Node `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*corev1.Node `json:"fullList"`
+}
+
+//TODO: more resource structure definitions.
 
 // ReporterContext defines the context object for reporter.
 type ReporterContext struct {

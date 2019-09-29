@@ -16,6 +16,7 @@ limitations under the License.
 package reporter
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -84,9 +85,8 @@ func TestHandlePod(t *testing.T) {
 
 	pod := newPod()
 	podReporter.handlePod(pod)
-	for key, val := range podReporter.updatedPodsMap.UpdateMap {
+	for key, pod := range podReporter.updatedPodsMap.UpdateMap {
 		if key == mapKey {
-			pod, _ := val.(*corev1.Pod)
 			assert.Equal(t, namespace, pod.Namespace)
 			assert.Equal(t, name, pod.Name)
 		}
@@ -101,9 +101,8 @@ func TestDeletePod(t *testing.T) {
 
 	pod := newPod()
 	podReporter.deletePod(pod)
-	for key, val := range podReporter.updatedPodsMap.UpdateMap {
+	for key, pod := range podReporter.updatedPodsMap.UpdateMap {
 		if key == mapKey {
-			pod, _ := val.(*corev1.Pod)
 			assert.Equal(t, namespace, pod.Namespace)
 			assert.Equal(t, name, pod.Name)
 		}
@@ -132,6 +131,19 @@ func TestRun(t *testing.T) {
 	data := <-podReporter.SyncChan
 	if data.Head.Command == clustermessage.CommandType_EdgeReport {
 		assert.Equal(t, clusterName, data.Head.ClusterName)
+
+		ret := []Report{}
+		err := json.Unmarshal(data.Body, &ret)
+		assert.Nil(t, err)
+
+		tmp := PodResourceStatus{}
+		err = json.Unmarshal(ret[0].Body, &tmp)
+		assert.Nil(t, err)
+
+		pod := tmp.UpdateMap["update456/update123"]
+		assert.IsType(t, &corev1.Pod{}, pod)
+		assert.Equal(t, "update123", pod.Name)
+		assert.Equal(t, "update456", pod.Namespace)
 	}
 	// test clean map
 	assert.Empty(t, podReporter.updatedPodsMap.UpdateMap)

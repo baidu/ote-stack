@@ -39,7 +39,7 @@ type PodReporter struct {
 	SyncChan chan clustermessage.ClusterMessage
 
 	updatedPodsRWMutex *sync.RWMutex
-	updatedPodsMap     *ResourceStatus
+	updatedPodsMap     *PodResourceStatus
 
 	ctx *ReporterContext
 }
@@ -52,9 +52,9 @@ func newPodReporter(ctx *ReporterContext) (*PodReporter, error) {
 
 	podReporter := &PodReporter{
 		ctx: ctx,
-		updatedPodsMap: &ResourceStatus{
-			UpdateMap: make(map[string]interface{}),
-			DelMap:    make(map[string]interface{}),
+		updatedPodsMap: &PodResourceStatus{
+			UpdateMap: make(map[string]*corev1.Pod),
+			DelMap:    make(map[string]*corev1.Pod),
 		},
 		updatedPodsRWMutex: &sync.RWMutex{},
 		SyncChan:           ctx.SyncChan,
@@ -99,17 +99,23 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	if len(pr.updatedPodsMap.UpdateMap) == 0 && len(pr.updatedPodsMap.DelMap) == 0 {
 		return
 	}
+
+	updatedPodsMapJSON, err := json.Marshal(*pr.updatedPodsMap)
+	if err != nil {
+		klog.Errorf("serialize map failed: %v", err)
+		return
+	}
 	// Define pod report content and convert to json
 	data := []Report{
 		{
 			ResourceType: ResourceTypePod,
-			Body:         *pr.updatedPodsMap,
+			Body:         updatedPodsMapJSON,
 		},
 	}
 
 	jsonMap, err := json.Marshal(data)
 	if err != nil {
-		klog.Errorf("serialize map failed: %v", err)
+		klog.Errorf("serialize report slice failed: %v", err)
 		return
 	}
 
@@ -129,8 +135,8 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	pr.SyncChan <- *msg
 
 	// clean up the map
-	pr.updatedPodsMap.DelMap = make(map[string]interface{})
-	pr.updatedPodsMap.UpdateMap = make(map[string]interface{})
+	pr.updatedPodsMap.DelMap = make(map[string]*corev1.Pod)
+	pr.updatedPodsMap.UpdateMap = make(map[string]*corev1.Pod)
 }
 
 // SetUpdateMap adds pod objects to UpdateMap.
