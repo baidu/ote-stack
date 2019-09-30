@@ -60,14 +60,13 @@ func newFakeCluster(name string) *otev1.Cluster {
 }
 
 func (f *fixture) newFakeClusterCrdController() *ClusterCrdController {
-	f.client = fake.NewSimpleClientset(f.objects...)
 	f.kubeClient = k8sfake.NewSimpleClientset(f.kubeObjects...)
 
-	k8sInformer := oteinformer.NewSharedInformerFactory(f.client, noResyncPeriodFunc())
-	fakeInformer := k8sInformer.Ote().V1().Clusters()
-	fakeChan := make(chan clustermessage.ClusterMessage)
-
-	return NewClusterCrdController(fakeInformer, f.kubeClient, fakeChan)
+	clusterCrdController := &ClusterCrdController{
+		sendChan:  make(chan clustermessage.ClusterMessage, 1),
+		k8sClient: f.kubeClient,
+	}
+	return clusterCrdController
 }
 
 func TestInitClusterCrdController(t *testing.T) {
@@ -76,14 +75,12 @@ func TestInitClusterCrdController(t *testing.T) {
 	f.kubeClient = k8sfake.NewSimpleClientset(f.kubeObjects...)
 
 	k8sInformer := oteinformer.NewSharedInformerFactory(f.client, noResyncPeriodFunc())
-	fakeChan := make(chan clustermessage.ClusterMessage)
 
 	ctx := &controllermanager.ControllerContext{
 		K8sContext: controllermanager.K8sContext{
 			OteInformerFactory: k8sInformer,
 			K8sClient:          f.kubeClient,
 		},
-		PublishChan: fakeChan,
 	}
 
 	err := InitClusterCrdController(ctx)
@@ -95,35 +92,14 @@ func TestSendNamespaceToNewCluster(t *testing.T) {
 	fakeController := f.newFakeClusterCrdController()
 
 	cluster := newFakeCluster("")
-	err := fakeController.SendNamespaceToNewCluster(cluster)
-	assert.NotNil(t, err)
+	err := fakeController.sendNamespaceToNewCluster(cluster)
+	assert.Nil(t, err)
 }
 
 func TestGetNamespaceList(t *testing.T) {
 	f := newFixture(t)
 	fakeController := f.newFakeClusterCrdController()
-	ret, err := fakeController.GetNamespaceList()
+	ret, err := fakeController.getNamespaceList()
 	assert.Nil(t, err)
 	assert.Nil(t, ret)
-}
-
-func TestSerializeNamespaceObject(t *testing.T) {
-	data, err := SerializeNamespaceObject("wangpan")
-	assert.Nil(t, err)
-	assert.NotNil(t, data)
-}
-
-func TestControlMultiTaskToClusterMessage(t *testing.T) {
-	msg := &clustermessage.ControlMultiTask{
-		Method: "POST",
-	}
-
-	ret := ControlMultiTaskToClusterMessage("", msg)
-	assert.Nil(t, ret)
-
-	ret = ControlMultiTaskToClusterMessage("c1", nil)
-	assert.Nil(t, ret)
-
-	ret = ControlMultiTaskToClusterMessage("c1", msg)
-	assert.NotNil(t, ret)
 }
