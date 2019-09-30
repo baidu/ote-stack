@@ -37,4 +37,28 @@ func TestUtil(t *testing.T) {
 	assert.Nil(t, err)
 	err = msg.Deserialize([]byte{'{'})
 	assert.NotNil(t, err)
+
+	head1 := &MessageHead{
+		Command: CommandType_ControlReq,
+	}
+	head2 := &MessageHead{
+		Command: CommandType_ControlMultiReq,
+	}
+	controllerTask := &ControllerTask{}
+	controlMultiTask := &ControlMultiTask{}
+	m, err := controllerTask.ToClusterMessage(head1)
+	assert.NotNil(t, m)
+	assert.Nil(t, err)
+
+	m, err = controllerTask.ToClusterMessage(head2)
+	assert.Nil(t, m)
+	assert.NotNil(t, err)
+
+	m, err = controlMultiTask.ToClusterMessage(head1)
+	assert.Nil(t, m)
+	assert.NotNil(t, err)
+
+	m, err = controlMultiTask.ToClusterMessage(head2)
+	assert.NotNil(t, m)
+	assert.Nil(t, err)
 }

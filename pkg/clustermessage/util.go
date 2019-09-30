@@ -42,3 +42,39 @@ func (c *ClusterMessage) Deserialize(data []byte) error {
 	}
 	return nil
 }
+
+//ToClusterMessage makes ControllerTask to ClusterMessage.
+func (c *ControllerTask) ToClusterMessage(head *MessageHead) (*ClusterMessage, error) {
+	if head.Command != CommandType_ControlReq {
+		return nil, fmt.Errorf("make ControllerTask to ClusterMessage failed: wrong command")
+	}
+
+	data, err := proto.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("make ControllerTask to ClusterMessage failed: %v", err)
+	}
+
+	ret := &ClusterMessage{
+		Head: head,
+		Body: data,
+	}
+	return ret, nil
+}
+
+//ToClusterMessage makes ControlMultiTask to ClusterMessage.
+func (c *ControlMultiTask) ToClusterMessage(head *MessageHead) (*ClusterMessage, error) {
+	if head.Command != CommandType_ControlMultiReq {
+		return nil, fmt.Errorf("make ControlMultiTask to ClusterMessage failed: wrong command")
+	}
+
+	data, err := proto.Marshal(c)
+	if err != nil {
+		return nil, fmt.Errorf("make ControlMultiTask to ClusterMessage failed: %v", err)
+	}
+
+	ret := &ClusterMessage{
+		Head: head,
+		Body: data,
+	}
+	return ret, nil
+}

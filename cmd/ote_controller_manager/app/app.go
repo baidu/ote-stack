@@ -39,6 +39,7 @@ import (
 	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 	"github.com/baidu/ote-stack/pkg/controller/clustercrd"
+	"github.com/baidu/ote-stack/pkg/controller/namespace"
 )
 
 const (
@@ -55,6 +56,7 @@ var (
 	rootClusterControllerAddr string
 	Controllers = map[string]controllermanager.InitFunc{
 		"clustercrd": clustercrd.InitClusterCrdController,
+		"namespace":  namespace.InitNamespaceController,
 	}
 )
 
@@ -196,5 +198,6 @@ func startControllers(ctx *controllermanager.ControllerContext) error {
 		klog.Infof("start controller %s", controllerName)
 	}
 	ctx.OteInformerFactory.Start(ctx.StopChan)
+	ctx.InformerFactory.Start(ctx.StopChan)
 	return nil
 }
