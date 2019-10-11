@@ -19,11 +19,13 @@ set -o nounset
 set -o pipefail
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
+echo "script root: $SCRIPT_ROOT"
 #CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 if [ -f go.mod ]; then
     echo "modules on"
     code_generator_path=`grep code-generator $SCRIPT_ROOT/go.mod|awk '{print $1"@"$2}'`
     CODEGEN_PKG=$GOPATH/pkg/mod/$code_generator_path
+    echo "code gen path: $CODEGEN_PKG"
     chmod +x "${CODEGEN_PKG}"/generate-groups.sh
     chmod -R +w $CODEGEN_PKG
 fi
@@ -35,8 +37,11 @@ fi
 "${CODEGEN_PKG}"/generate-groups.sh "deepcopy,client,informer,lister" \
   github.com/baidu/ote-stack/pkg/generated github.com/baidu/ote-stack/pkg/apis \
   ote:v1 \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../../../" \
+  --output-base "$SCRIPT_ROOT" \
   --go-header-file "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
 
 # To use your own boilerplate text append:
 #   --go-header-file "${SCRIPT_ROOT}"/hack/custom-boilerplate.go.txt
+
+# move generated code to pkg and clean the output
+cp -R $SCRIPT_ROOT/github.com/baidu/ote-stack/pkg/* $SCRIPT_ROOT/pkg && rm -rf $SCRIPT_ROOT/github.com

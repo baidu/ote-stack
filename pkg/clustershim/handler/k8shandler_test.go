@@ -22,11 +22,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes/scheme"
 	fakerest "k8s.io/client-go/rest/fake"
-	"github.com/golang/protobuf/proto"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	//	fakek8s "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
@@ -36,14 +37,14 @@ func makeControlMultiTask(method string, t *testing.T) []byte {
 	msg := &clustermessage.ControlMultiTask{
 		Method: method,
 		URI:    "/",
-		Body:	[][]byte{{1},{2}},
+		Body:   [][]byte{{1}, {2}},
 	}
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		t.Errorf("to controller task request failed: %v", err)
 		return nil
 	}
-	return data	
+	return data
 }
 
 func TestK8sHandlerDo(t *testing.T) {
@@ -56,7 +57,7 @@ func TestK8sHandlerDo(t *testing.T) {
 			},
 		),
 		GroupVersion:         v1.SchemeGroupVersion,
-		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		NegotiatedSerializer: serializer.NewCodecFactory(scheme.Scheme),
 		VersionedAPIPath:     "/",
 	}
 	h := &k8sHandler{restclient: fakeRestClient}
@@ -85,11 +86,11 @@ func TestK8sHandlerDoControlRequest(t *testing.T) {
 			},
 		),
 		GroupVersion:         v1.SchemeGroupVersion,
-		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		NegotiatedSerializer: serializer.NewCodecFactory(scheme.Scheme),
 		VersionedAPIPath:     "/",
 	}
 	h := &k8sHandler{restclient: fakeRestClient}
-	
+
 	data1 := getControllerTask(http.MethodGet, t)
 	data2 := getControllerTask(http.MethodPost, t)
 	data3 := getControllerTask(http.MethodPut, t)
@@ -196,7 +197,7 @@ func TestDoControlMultiRequest(t *testing.T) {
 			},
 		),
 		GroupVersion:         v1.SchemeGroupVersion,
-		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+		NegotiatedSerializer: serializer.NewCodecFactory(scheme.Scheme),
 		VersionedAPIPath:     "/",
 	}
 	h := &k8sHandler{restclient: fakeRestClient}
@@ -208,8 +209,8 @@ func TestDoControlMultiRequest(t *testing.T) {
 	data5 := makeControlMultiTask(http.MethodPatch, t)
 
 	successcase := []struct {
-		Name       string
-		Request    *clustermessage.ClusterMessage
+		Name    string
+		Request *clustermessage.ClusterMessage
 	}{
 		{
 			Name: "method Get",

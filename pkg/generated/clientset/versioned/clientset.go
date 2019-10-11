@@ -28,6 +28,8 @@ import (
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	OteV1() otev1.OteV1Interface
+	// Deprecated: please explicitly pick a version if possible.
+	Ote() otev1.OteV1Interface
 }
 
 // Clientset contains the clients for groups. Each group has exactly one
@@ -39,6 +41,12 @@ type Clientset struct {
 
 // OteV1 retrieves the OteV1Client
 func (c *Clientset) OteV1() otev1.OteV1Interface {
+	return c.oteV1
+}
+
+// Deprecated: Ote retrieves the default version of OteClient.
+// Please explicitly pick a version.
+func (c *Clientset) Ote() otev1.OteV1Interface {
 	return c.oteV1
 }
 
