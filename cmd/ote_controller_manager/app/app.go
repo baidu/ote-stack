@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -33,13 +35,13 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog"
 
+	"github.com/baidu/ote-stack/pkg/controller/clustercrd"
+	"github.com/baidu/ote-stack/pkg/controller/namespace"
 	"github.com/baidu/ote-stack/pkg/controllermanager"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 	oteinformer "github.com/baidu/ote-stack/pkg/generated/informers/externalversions"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/tunnel"
-	"github.com/baidu/ote-stack/pkg/controller/clustercrd"
-	"github.com/baidu/ote-stack/pkg/controller/namespace"
 )
 
 const (
@@ -54,7 +56,7 @@ const (
 var (
 	kubeConfig                string
 	rootClusterControllerAddr string
-	Controllers = map[string]controllermanager.InitFunc{
+	Controllers               = map[string]controllermanager.InitFunc{
 		"clustercrd": clustercrd.InitClusterCrdController,
 		"namespace":  namespace.InitNamespaceController,
 	}
@@ -136,15 +138,14 @@ func Run() error {
 	// add a uniquifier so that two processes on the same host don't accidentally both become active
 	id = id + "_" + string(uuid.NewUUID())
 	rl, err := resourcelock.New(
-		//resourcelock.EndpointsResourceLock,
-		resourcelock.LeasesResourceLock,
+		resourcelock.EndpointsResourceLock,
 		"kube-system",
 		oteControllerManagerName,
 		k8sClient.CoreV1(),
-		k8sClient.CoordinationV1(),
 		resourcelock.ResourceLockConfig{
 			Identity: id,
-			// TODO add event recorder for debug
+			// add local event recorder for debug
+			EventRecorder: &localEventRecoder{},
 		})
 	if err != nil {
 		return fmt.Errorf("error creating lock: %v", err)
@@ -200,4 +201,22 @@ func startControllers(ctx *controllermanager.ControllerContext) error {
 	ctx.OteInformerFactory.Start(ctx.StopChan)
 	ctx.InformerFactory.Start(ctx.StopChan)
 	return nil
+}
+
+// localEventRecoder is a recorder for leaderelection which print event log to local logs.
+// localEventRecoder implements recode.EventRecorder interface.
+// only Eventf func is needed.
+type localEventRecoder struct{}
+
+func (ler *localEventRecoder) Eventf(obj runtime.Object, eventType, reason, message string, args ...interface{}) {
+	klog.Infof("local event record[%v][%s][%s][%s]%v",
+		obj, eventType, reason, message, args)
+}
+
+func (ler *localEventRecoder) Event(object runtime.Object, eventtype, reason, message string) {}
+
+func (ler *localEventRecoder) PastEventf(object runtime.Object, timestamp metav1.Time, eventtype, reason, messageFmt string, args ...interface{}) {
+}
+
+func (ler *localEventRecoder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 }
