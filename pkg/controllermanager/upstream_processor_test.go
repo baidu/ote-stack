@@ -17,11 +17,20 @@ limitations under the License.
 package controllermanager
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	kubernetes "k8s.io/client-go/kubernetes/fake"
+	kubetesting "k8s.io/client-go/testing"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
 func TestHandleReceivedMessage(t *testing.T) {
@@ -48,10 +57,49 @@ func TestHandleReceivedMessage(t *testing.T) {
 
 	// get msg with command EdgeReport
 	// TODO detail assert
+	podUpdatesMap := &reporter.PodResourceStatus{
+		UpdateMap: make(map[string]*corev1.Pod),
+		DelMap:    make(map[string]*corev1.Pod),
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-name1",
+			Namespace:       "test-namespace1",
+			Labels:          map[string]string{"ote-cluster": "cluster1"},
+			ResourceVersion: "10",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+	}
+	podUpdatesMap.UpdateMap["test-namespace1/test-name1"] = pod
+	podUpdatesMap.DelMap["test-namespace1/test-name2"] = pod
+
+	podUpdatesMapJSON, err := json.Marshal(*podUpdatesMap)
+	assert.Nil(t, err)
+
+	reportData := []reporter.Report{
+		{
+			ResourceType: reporter.ResourceTypePod,
+			Body:         podUpdatesMapJSON,
+		},
+	}
+
+	body, err := json.Marshal(reportData)
+	assert.Nil(t, err)
+
 	msg.Head.Command = clustermessage.CommandType_EdgeReport
+	msg.Body = body
+
 	data, err = msg.Serialize()
 	assert.NotNil(t, data)
 	assert.Nil(t, err)
+
+	mockClient := &kubernetes.Clientset{}
+	mockClient.AddReactor("get", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+		return true, nil, kubeerrors.NewNotFound(schema.GroupResource{}, "")
+	})
+	u.ctx.K8sClient = mockClient
 	err = u.HandleReceivedMessage("", data)
 	assert.Nil(t, err)
 }

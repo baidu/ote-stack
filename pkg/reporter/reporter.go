@@ -35,7 +35,8 @@ const (
 	ResourceTypeClusterStatus
 	ResourceTypeEvent
 
-	ClusterLabel = "ote-cluster"
+	ClusterLabel     = "ote-cluster"
+	EdgeVersionLabel = "edge-version"
 )
 
 //Report defines edge report content.
