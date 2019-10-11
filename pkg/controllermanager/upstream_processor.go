@@ -17,11 +17,13 @@ limitations under the License.
 package controllermanager
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
 // UpstreamProcessor processes msg from root cluster controller.
@@ -55,7 +57,10 @@ func (u *UpstreamProcessor) HandleReceivedMessage(client string, data []byte) (r
 	// TODO add other command cases
 	switch msg.Head.Command {
 	case clustermessage.CommandType_EdgeReport:
-		ret = processEdgeReport(msg)
+		ret = u.processEdgeReport(msg)
+		if ret != nil {
+			klog.Errorf("processEdgeReport failed: %v", ret)
+		}
 	default:
 		ret = fmt.Errorf("handleReceivedMessage failed: %s command not supported", msg.Head.Command.String())
 		klog.Error(ret)
@@ -63,7 +68,36 @@ func (u *UpstreamProcessor) HandleReceivedMessage(client string, data []byte) (r
 	return
 }
 
-// TODO process edge report
-func processEdgeReport(msg *clustermessage.ClusterMessage) error {
-	return nil
+func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage) (err error) {
+	klog.V(3).Info("start processEdgeReport")
+
+	reports, err := ReportDeserialize(msg.Body)
+	if err != nil {
+		klog.Errorf("deserialize reports(%s) failed: %v", msg.Body, err)
+		return
+	}
+
+	//TODO:more resource handle.
+	for _, report := range reports {
+		switch report.ResourceType {
+		case reporter.ResourceTypePod:
+			err = u.handlePodReport(report.Body)
+			klog.Error(err)
+		default:
+			err = fmt.Errorf("handlePodReport failed: reource type error")
+			klog.Error(err)
+			break
+		}
+	}
+	return
+}
+
+// ReportDeserialize deserialize byte data to report slice.
+func ReportDeserialize(b []byte) ([]reporter.Report, error) {
+	reports := []reporter.Report{}
+	err := json.Unmarshal(b, &reports)
+	if err != nil {
+		return nil, err
+	}
+	return reports, nil
 }
