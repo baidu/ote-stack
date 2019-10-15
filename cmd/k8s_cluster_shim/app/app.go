@@ -104,7 +104,8 @@ func Run() error {
 		InformerFactory: informers.NewSharedInformerFactory(k8sClient, informerDuration),
 		ClusterName:     s.ClusterName,
 		SyncChan:        s.SendChan(),
-		StopChan:        ctx.Done(), 
+		StopChan:        ctx.Done(),
+		KubeClient:      k8sClient,
 	}
 
 	err = startReporters(reporterContext)
