@@ -18,8 +18,12 @@ limitations under the License.
 package reporter
 
 import (
+	"encoding/json"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/informers"
+	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
@@ -39,12 +43,15 @@ const (
 	EdgeVersionLabel = "edge-version"
 )
 
-//Report defines edge report content.
+// Report defines edge report content.
 type Report struct {
 	ResourceType int `json:"resourceType"`
 	// Body defines different resource status.
 	Body []byte `json:"body"`
 }
+
+// Reports is a collection of resource report.
+type Reports []Report
 
 // PodResourceStatus defines pod resource status.
 type PodResourceStatus struct {
@@ -66,6 +73,19 @@ type NodeResourceStatus struct {
 	FullList []*corev1.Node `json:"fullList"`
 }
 
+// ClusterResource represents the resources of a cluster.
+type ClusterResource struct {
+	// Capacity represents the total resources of a cluster.
+	Capacity map[corev1.ResourceName]*resource.Quantity `json:"capacity"`
+	// Allocatable represents the resources of a cluster that are available for scheduling.
+	Allocatable map[corev1.ResourceName]*resource.Quantity `json:"allocatable"`
+}
+
+// ClusterStatus represents information about the status of a cluster.
+type ClusterStatus struct {
+	ClusterResource
+}
+
 //TODO: more resource structure definitions.
 
 // ReporterContext defines the context object for reporter.
@@ -78,6 +98,8 @@ type ReporterContext struct {
 	SyncChan chan clustermessage.ClusterMessage
 	// StopChan is the stop channel.
 	StopChan <-chan struct{}
+	// KubeClient is the kubernetes client interface for the reporter to use.
+	KubeClient kubernetes.Interface
 }
 
 // InitFunc is used to launch a particular reporter.
@@ -89,6 +111,7 @@ func NewReporterInitializers() map[string]InitFunc {
 	// TODO initialize reporter instance
 
 	reporters["podReporter"] = startPodReporter
+	reporters["clusterStatusReporter"] = startClusterStatusReporter
 	return reporters
 }
 
@@ -112,4 +135,21 @@ func (ctx *ReporterContext) IsValid() bool {
 	}
 
 	return true
+}
+
+// ToClusterMessage packs the Report infomation into clustermessage.
+func (r Reports) ToClusterMessage(clusterName string) (*clustermessage.ClusterMessage, error) {
+	body, err := json.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command:     clustermessage.CommandType_EdgeReport,
+			ClusterName: clusterName,
+		},
+		Body: body,
+	}
+	return msg, nil
 }
