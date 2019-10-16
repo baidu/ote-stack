@@ -112,6 +112,8 @@ func NewReporterInitializers() map[string]InitFunc {
 
 	reporters["podReporter"] = startPodReporter
 	reporters["clusterStatusReporter"] = startClusterStatusReporter
+	reporters["nodeReporter"] = startNodeReporter
+
 	return reporters
 }
 

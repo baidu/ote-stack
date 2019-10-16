@@ -86,13 +86,10 @@ func TestHandlePod(t *testing.T) {
 	pod := newPod()
 	podReporter.handlePod(pod)
 	for key, pod := range podReporter.updatedPodsMap.UpdateMap {
-		if key == mapKey {
-			assert.Equal(t, namespace, pod.Namespace)
-			assert.Equal(t, name, pod.Name)
-		}
+		assert.Equal(t, key, mapKey)
+		assert.Equal(t, namespace, pod.Namespace)
+		assert.Equal(t, name, pod.Name)
 	}
-	// not pod Object
-	podReporter.handlePod(struct{}{})
 }
 
 func TestDeletePod(t *testing.T) {
@@ -102,13 +99,10 @@ func TestDeletePod(t *testing.T) {
 	pod := newPod()
 	podReporter.deletePod(pod)
 	for key, pod := range podReporter.updatedPodsMap.UpdateMap {
-		if key == mapKey {
-			assert.Equal(t, namespace, pod.Namespace)
-			assert.Equal(t, name, pod.Name)
-		}
+		assert.Equal(t, key, mapKey)
+		assert.Equal(t, namespace, pod.Namespace)
+		assert.Equal(t, name, pod.Name)
 	}
-	// not pod Object
-	podReporter.deletePod(struct{}{})
 }
 
 func TestRun(t *testing.T) {
@@ -129,26 +123,25 @@ func TestRun(t *testing.T) {
 	go podReporter.Run(stopChan)
 
 	data := <-podReporter.SyncChan
-	if data.Head.Command == clustermessage.CommandType_EdgeReport {
-		assert.Equal(t, clusterName, data.Head.ClusterName)
+	assert.Equal(t, clustermessage.CommandType_EdgeReport, data.Head.Command)
+	assert.Equal(t, clusterName, data.Head.ClusterName)
 
-		ret := []Report{}
-		err := json.Unmarshal(data.Body, &ret)
-		assert.Nil(t, err)
+	ret := []Report{}
+	err := json.Unmarshal(data.Body, &ret)
+	assert.Nil(t, err)
 
-		tmp := PodResourceStatus{}
-		err = json.Unmarshal(ret[0].Body, &tmp)
-		assert.Nil(t, err)
+	prs := PodResourceStatus{}
+	err = json.Unmarshal(ret[0].Body, &prs)
+	assert.Nil(t, err)
 
-		pod := tmp.UpdateMap["update456/update123"]
-		assert.IsType(t, &corev1.Pod{}, pod)
-		assert.Equal(t, "update123", pod.Name)
-		assert.Equal(t, "update456", pod.Namespace)
-	}
+	pod = prs.UpdateMap["update456/update123"]
+	assert.IsType(t, &corev1.Pod{}, pod)
+	assert.Equal(t, "update123", pod.Name)
+	assert.Equal(t, "update456", pod.Namespace)
+
 	// test clean map
 	assert.Empty(t, podReporter.updatedPodsMap.UpdateMap)
 
-	stopChan <- struct{}{}
 	close(podReporter.SyncChan)
 }
 

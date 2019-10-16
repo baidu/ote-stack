@@ -35,107 +35,102 @@ import (
 )
 
 var (
-	podGroup = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	nodeGroup = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
 )
 
-func newPodUpdateAction(namespace string, pod *corev1.Pod) kubetesting.UpdateActionImpl {
-	return kubetesting.NewUpdateAction(podGroup, namespace, pod)
+func newNodeUpdateAction(node *corev1.Node) kubetesting.UpdateActionImpl {
+	return kubetesting.NewUpdateAction(nodeGroup, "", node)
 }
 
-func newPodGetAction(namespace, name string) kubetesting.GetActionImpl {
-	return kubetesting.NewGetAction(podGroup, namespace, name)
+func newNodeGetAction(name string) kubetesting.GetActionImpl {
+	return kubetesting.NewGetAction(nodeGroup, "", name)
 }
 
-func newPodCreateAction(namespace string, pod *corev1.Pod) kubetesting.CreateActionImpl {
-	return kubetesting.NewCreateAction(podGroup, namespace, pod)
+func newNodeCreateAction(node *corev1.Node) kubetesting.CreateActionImpl {
+	return kubetesting.NewCreateAction(nodeGroup, "", node)
 }
 
-func newPodDeleteAction(namespace string, name string) kubetesting.DeleteActionImpl {
-	return kubetesting.NewDeleteAction(podGroup, namespace, name)
+func newNodeDeleteAction(name string) kubetesting.DeleteActionImpl {
+	return kubetesting.NewDeleteAction(nodeGroup, "", name)
 }
 
-func TestHandlePodReport(t *testing.T) {
+func TestHandleNodeReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
 
-	podUpdatesMap := &reporter.PodResourceStatus{
-		UpdateMap: make(map[string]*corev1.Pod),
-		DelMap:    make(map[string]*corev1.Pod),
+	nodeUpdatesMap := &reporter.NodeResourceStatus{
+		UpdateMap: make(map[string]*corev1.Node),
+		DelMap:    make(map[string]*corev1.Node),
 	}
-	pod := &corev1.Pod{
+	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test-name1",
-			Namespace:       "test-namespace1",
 			Labels:          map[string]string{reporter.ClusterLabel: "cluster1"},
 			ResourceVersion: "10",
 		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
+		Status: corev1.NodeStatus{
+			Phase: corev1.NodeRunning,
 		},
 	}
-	podUpdatesMap.UpdateMap["test-namespace1/test-name1"] = pod
-	podUpdatesMap.DelMap["test-namespace1/test-name2"] = pod
+	nodeUpdatesMap.UpdateMap["test-namespace1/test-name1"] = node
+	nodeUpdatesMap.DelMap["test-namespace1/test-name2"] = node
 
-	podUpdatesMapJSON, err := json.Marshal(*podUpdatesMap)
+	nodeUpdatesMapJSON, err := json.Marshal(nodeUpdatesMap)
 	assert.Nil(t, err)
 
 	reportData := reporter.Report{
-		ResourceType: reporter.ResourceTypePod,
-		Body:         podUpdatesMapJSON,
+		ResourceType: reporter.ResourceTypeNode,
+		Body:         nodeUpdatesMapJSON,
 	}
 
-	podReportJSON, err := json.Marshal(reportData)
+	nodeReportJSON, err := json.Marshal(reportData)
 	assert.Nil(t, err)
 
-	err = u.handlePodReport(podReportJSON)
+	err = u.handleNodeReport(nodeReportJSON)
 	assert.Nil(t, err)
 
-	err = u.handlePodReport([]byte{1, 2, 3})
+	err = u.handleNodeReport([]byte{1, 2, 3})
 	assert.Error(t, err)
 }
 
-func TestRetryUpdate(t *testing.T) {
+func TestRetryNodeUpdate(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
 
-	pod := &corev1.Pod{
+	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test-name1",
-			Namespace:       "test-namespace1",
 			Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "11"},
 			ResourceVersion: "1",
 		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
+		Status: corev1.NodeStatus{
+			Phase: corev1.NodeRunning,
 		},
 	}
 
-	getPod := &corev1.Pod{
+	getNode := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test-name1",
 			ResourceVersion: "4",
-			Namespace:       "test-namespace1",
 			Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "1"},
 		},
 	}
 
-	mockClient, tracker := newSimpleClientset(getPod)
+	mockClient, tracker := newSimpleClientset(getNode)
 
 	// mock api server ResourceVersion conflict
-	mockClient.PrependReactor("update", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+	mockClient.PrependReactor("update", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
 
-		etcdPod := &corev1.Pod{
+		etcdNode := &corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:            "test-name1",
 				ResourceVersion: "9",
-				Namespace:       "test-namespace1",
 				Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "0"},
 			},
 		}
-
-		if uplPod, ok := action.(kubetesting.UpdateActionImpl); ok {
-			if pods, ok := uplPod.Object.(*corev1.Pod); ok {
+		if uNode, ok := action.(kubetesting.UpdateActionImpl); ok {
+			if nodes, ok := uNode.Object.(*corev1.Node); ok {
 				// ResourceVersion same length, can be compared with string
-				if strings.Compare(etcdPod.ResourceVersion, pods.ResourceVersion) != 0 {
-					err := tracker.Update(podGroup, etcdPod, etcdPod.Namespace)
+				if strings.Compare(etcdNode.ResourceVersion, nodes.ResourceVersion) != 0 {
+					err := tracker.Update(nodeGroup, etcdNode, "")
 					assert.Nil(t, err)
 					return true, nil, kubeerrors.NewConflict(schema.GroupResource{}, "", nil)
 				}
@@ -145,33 +140,30 @@ func TestRetryUpdate(t *testing.T) {
 	})
 
 	u.ctx.K8sClient = mockClient
-	err := u.UpdatePod(pod)
+	err := u.UpdateNode(node)
 	assert.Nil(t, err)
-
 }
 
-func TestGetCreateOrUpdatePod(t *testing.T) {
-	testPod := &corev1.Pod{
+func TestGetCreateOrUpdateNode(t *testing.T) {
+	testNode := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "testPod1",
+			Name:            "testNode1",
 			ResourceVersion: "10",
-			Namespace:       "testNamespace",
 			Labels:          map[string]string{reporter.EdgeVersionLabel: "11"},
 		},
 	}
-	testPod1 := &corev1.Pod{
+	testNode1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "testPod1",
+			Name:            "testNode1",
 			ResourceVersion: "10",
-			Namespace:       "testNamespace",
 			Labels:          map[string]string{reporter.EdgeVersionLabel: "12"},
 		},
 	}
 
 	tests := []struct {
 		name            string
-		pod             *corev1.Pod
-		getPodResult    *corev1.Pod
+		node            *corev1.Node
+		getNodeResult   *corev1.Node
 		errorOnGet      error
 		errorOnCreation error
 		errorOnUpdate   error
@@ -180,43 +172,44 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 		expectErr       bool
 	}{
 		{
-			name:            "Success to create a new pod.",
-			pod:             testPod,
-			getPodResult:    nil,
+			name:            "Success to create a new node.",
+			node:            testNode,
+			getNodeResult:   nil,
 			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
 			errorOnCreation: nil,
 			expectActions: []kubetesting.Action{
-				newPodGetAction(testPod.Namespace, testPod.Name),
-				newPodCreateAction(testPod.Namespace, testPod),
+				newNodeGetAction(testNode.Name),
+				newNodeCreateAction(testNode),
 			},
 			expectErr: false,
 		},
 		{
-			name:            "A error occurs when create a new pod fails.",
-			pod:             testPod,
-			getPodResult:    nil,
+			name:            "A error occurs when create a new node fails.",
+			node:            testNode,
+			getNodeResult:   nil,
 			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
 			errorOnCreation: errors.New("wanted error"),
 			expectActions: []kubetesting.Action{
-				newPodGetAction(testPod.Namespace, testPod.Name),
-				newPodCreateAction(testPod.Namespace, testPod),
+				newNodeGetAction(testNode.Name),
+				newNodeCreateAction(testNode),
 			},
 			expectErr: true,
 		},
 		{
-			name:            "A error occurs when create an existent pod.",
-			pod:             testPod1,
-			getPodResult:    testPod,
+			name:            "A error occurs when create an existent node.",
+			node:            testNode1,
+			getNodeResult:   testNode,
 			errorOnGet:      nil,
 			errorOnCreation: nil,
 			errorOnUpdate:   errors.New("wanted error"),
 			expectActions: []kubetesting.Action{
-				newPodGetAction(testPod.Namespace, testPod.Name),
-				newPodUpdateAction(testPod.Namespace, testPod),
+				newNodeGetAction(testNode.Name),
+				newNodeUpdateAction(testNode),
 			},
 			expectErr: true,
 		},
 	}
+
 	u := NewUpstreamProcessor(&K8sContext{})
 
 	for _, test := range tests {
@@ -225,18 +218,18 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 
 			// Mock.
 			mockClient := &kubernetes.Clientset{}
-			mockClient.AddReactor("get", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
-				return true, test.getPodResult, test.errorOnGet
+			mockClient.AddReactor("get", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
+				return true, test.getNodeResult, test.errorOnGet
 			})
-			mockClient.AddReactor("create", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			mockClient.AddReactor("create", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
 				return true, nil, test.errorOnCreation
 			})
-			mockClient.AddReactor("update", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			mockClient.AddReactor("update", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
 				return true, nil, test.errorOnUpdate
 			})
 
 			u.ctx.K8sClient = mockClient
-			err := u.CreateOrUpdatePod(test.pod)
+			err := u.CreateOrUpdateNode(test.node)
 
 			if test.expectErr {
 				assert.Error(err)
@@ -249,46 +242,46 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 	}
 }
 
-func TestDeletePod(t *testing.T) {
-	testPod := &corev1.Pod{
+func TestDeleteNode(t *testing.T) {
+	testNode := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "testPod1",
+			Name:            "testNode1",
 			ResourceVersion: "10",
-			Namespace:       "testNamespace",
 			Labels:          map[string]string{reporter.EdgeVersionLabel: "11"},
 		},
 	}
 
 	tests := []struct {
 		name          string
-		pod           *corev1.Pod
-		getPodResult  *corev1.Pod
+		node          *corev1.Node
+		getNodeResult *corev1.Node
 		errorOnGet    error
 		errorOnDelete error
 		expectActions []kubetesting.Action
 		expectErr     bool
 	}{
 		{
-			name:          "Success to delete an existent pod.",
-			pod:           testPod,
-			getPodResult:  nil,
+			name:          "Success to delete an existent node.",
+			node:          testNode,
+			getNodeResult: nil,
 			errorOnDelete: nil,
 			expectActions: []kubetesting.Action{
-				newPodDeleteAction(testPod.Namespace, testPod.Name),
+				newNodeDeleteAction(testNode.Name),
 			},
 			expectErr: false,
 		},
 		{
-			name:          "A error occurs when delete a pod fails.",
-			pod:           testPod,
-			getPodResult:  nil,
+			name:          "A error occurs when delete a node fails.",
+			node:          testNode,
+			getNodeResult: nil,
 			errorOnDelete: errors.New("wanted error"),
 			expectActions: []kubetesting.Action{
-				newPodDeleteAction(testPod.Namespace, testPod.Name),
+				newNodeDeleteAction(testNode.Name),
 			},
 			expectErr: true,
 		},
 	}
+
 	u := NewUpstreamProcessor(&K8sContext{})
 
 	for _, test := range tests {
@@ -297,12 +290,12 @@ func TestDeletePod(t *testing.T) {
 
 			// Mock
 			mockClient := &kubernetes.Clientset{}
-			mockClient.AddReactor("delete", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			mockClient.AddReactor("delete", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
 				return true, nil, test.errorOnDelete
 			})
 
 			u.ctx.K8sClient = mockClient
-			err := u.DeletePod(test.pod)
+			err := u.DeleteNode(test.node)
 
 			if test.expectErr {
 				assert.Error(err)
