@@ -145,3 +145,25 @@ func newSimpleClientset(objects ...runtime.Object) (*kubernetes.Clientset, kubet
 
 	return cs, o
 }
+
+func TestUniqueResourceName(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-name",
+			Namespace:       "test-namespace",
+			Labels:          map[string]string{reporter.ClusterLabel: "cluster123"},
+			ResourceVersion: "10",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+	}
+
+	err := UniqueResourceName(&pod.ObjectMeta)
+	assert.Nil(t, err)
+	assert.Equal(t, "test-name-cluster123", pod.Name)
+
+	pod.Labels = make(map[string]string)
+	err = UniqueResourceName(&pod.ObjectMeta)
+	assert.Error(t, err)
+}

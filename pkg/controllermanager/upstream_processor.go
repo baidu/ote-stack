@@ -20,10 +20,15 @@ import (
 	"encoding/json"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/reporter"
+)
+
+const (
+	UniqueResourceNameSeparator = "-"
 )
 
 // UpstreamProcessor processes msg from root cluster controller.
@@ -82,11 +87,12 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 		switch report.ResourceType {
 		case reporter.ResourceTypePod:
 			err = u.handlePodReport(report.Body)
-			klog.Error(err)
+			klog.Errorf("handlePodReport failed: %v", err)
+		case reporter.ResourceTypeNode:
+			err = u.handleNodeReport(report.Body)
+			klog.Errorf("handleNodeReport failed: %v", err)
 		default:
-			err = fmt.Errorf("handlePodReport failed: reource type error")
-			klog.Error(err)
-			break
+			klog.Errorf("processEdgeReport failed, reource type(%d) not support", report.ResourceType)
 		}
 	}
 	return
@@ -100,4 +106,14 @@ func ReportDeserialize(b []byte) ([]reporter.Report, error) {
 		return nil, err
 	}
 	return reports, nil
+}
+
+// UniqueResourceName returns unique resource name.
+func UniqueResourceName(obj *metav1.ObjectMeta) error {
+	if obj.Labels[reporter.ClusterLabel] == "" {
+		return fmt.Errorf("ClusterLabel is empty")
+	}
+	obj.Name = obj.Name + UniqueResourceNameSeparator + obj.Labels[reporter.ClusterLabel]
+
+	return nil
 }
