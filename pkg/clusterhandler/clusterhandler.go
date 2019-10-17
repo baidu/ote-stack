@@ -372,7 +372,7 @@ func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret
 			c.transmitToParent(msg)
 		}
 	default:
-		if msg.Head.ParentClusterName == c.conf.ClusterName {
+		if c.isRoot() {
 			// send to controller manager
 			ret = c.sendToControllerManager(msg)
 			// TODO return error if failed
