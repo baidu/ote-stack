@@ -26,11 +26,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	kubernetes "k8s.io/client-go/kubernetes/fake"
 	kubetesting "k8s.io/client-go/testing"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/reporter"
+)
+
+var (
+	scheme             = runtime.NewScheme()
+	codecs             = serializer.NewCodecFactory(scheme)
+	localSchemeBuilder = runtime.SchemeBuilder{
+		corev1.AddToScheme,
+	}
+	addToScheme = localSchemeBuilder.AddToScheme
 )
 
 func TestHandleReceivedMessage(t *testing.T) {
@@ -65,7 +77,7 @@ func TestHandleReceivedMessage(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test-name1",
 			Namespace:       "test-namespace1",
-			Labels:          map[string]string{"ote-cluster": "cluster1"},
+			Labels:          map[string]string{reporter.ClusterLabel: "cluster1"},
 			ResourceVersion: "10",
 		},
 		Status: corev1.PodStatus{
@@ -102,4 +114,34 @@ func TestHandleReceivedMessage(t *testing.T) {
 	u.ctx.K8sClient = mockClient
 	err = u.HandleReceivedMessage("", data)
 	assert.Nil(t, err)
+}
+
+func init() {
+	metav1.AddToGroupVersion(scheme, schema.GroupVersion{Version: "v1"})
+	utilruntime.Must(addToScheme(scheme))
+}
+
+// client-go v10 version not found Tracker()
+func newSimpleClientset(objects ...runtime.Object) (*kubernetes.Clientset, kubetesting.ObjectTracker) {
+	o := kubetesting.NewObjectTracker(scheme, codecs.UniversalDecoder())
+	for _, obj := range objects {
+		if err := o.Add(obj); err != nil {
+			panic(err)
+		}
+	}
+
+	cs := &kubernetes.Clientset{}
+	//cs.discovery = &fakediscovery.FakeDiscovery{Fake: &cs.Fake}
+	cs.AddReactor("*", "*", kubetesting.ObjectReaction(o))
+	cs.AddWatchReactor("*", func(action kubetesting.Action) (handled bool, ret watch.Interface, err error) {
+		gvr := action.GetResource()
+		ns := action.GetNamespace()
+		watch, err := o.Watch(gvr, ns)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, watch, nil
+	})
+
+	return cs, o
 }

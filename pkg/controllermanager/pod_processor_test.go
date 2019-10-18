@@ -92,6 +92,7 @@ func TestHandlePodReport(t *testing.T) {
 	err = u.handlePodReport([]byte{1, 2, 3})
 	assert.Error(t, err)
 }
+
 func TestRetryUpdate(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
 
@@ -106,7 +107,7 @@ func TestRetryUpdate(t *testing.T) {
 			Phase: corev1.PodRunning,
 		},
 	}
-	//
+
 	getPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "test-name1",
@@ -116,7 +117,7 @@ func TestRetryUpdate(t *testing.T) {
 		},
 	}
 
-	mockClient := kubernetes.NewSimpleClientset(getPod)
+	mockClient, tracker := newSimpleClientset(getPod)
 
 	// mock api server ResourceVersion conflict
 	mockClient.PrependReactor("update", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
@@ -134,7 +135,7 @@ func TestRetryUpdate(t *testing.T) {
 			if pods, ok := uplPod.Object.(*corev1.Pod); ok {
 				// ResourceVersion same length, can be compared with string
 				if strings.Compare(etcdPod.ResourceVersion, pods.ResourceVersion) != 0 {
-					err := mockClient.Tracker().Update(podGroup, etcdPod, etcdPod.Namespace)
+					err := tracker.Update(podGroup, etcdPod, etcdPod.Namespace)
 					assert.Nil(t, err)
 					return true, nil, kubeerrors.NewConflict(schema.GroupResource{}, "", nil)
 				}
