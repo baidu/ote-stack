@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 
+	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
@@ -115,7 +116,7 @@ func TestCaculateClusterResource(t *testing.T) {
 	testcase := []struct {
 		Name         string
 		Nodes        *corev1.NodeList
-		ExpectResult *ClusterResource
+		ExpectResult *otev1.ClusterResource
 	}{
 		{
 			Name: "all ready node",
@@ -125,7 +126,7 @@ func TestCaculateClusterResource(t *testing.T) {
 					*newFakeNode(16, 1024, 12, 512, corev1.ConditionTrue),
 				},
 			},
-			ExpectResult: &ClusterResource{
+			ExpectResult: &otev1.ClusterResource{
 				Capacity: map[corev1.ResourceName]*resource.Quantity{
 					corev1.ResourceCPU:    resource.NewQuantity(32, resource.DecimalSI),
 					corev1.ResourceMemory: resource.NewQuantity(2048, resource.BinarySI),
@@ -145,7 +146,7 @@ func TestCaculateClusterResource(t *testing.T) {
 					*newFakeNode(16, 1024, 12, 512, corev1.ConditionFalse),
 				},
 			},
-			ExpectResult: &ClusterResource{
+			ExpectResult: &otev1.ClusterResource{
 				Capacity: map[corev1.ResourceName]*resource.Quantity{
 					corev1.ResourceCPU:    resource.NewQuantity(32, resource.DecimalSI),
 					corev1.ResourceMemory: resource.NewQuantity(2048, resource.BinarySI),
@@ -239,15 +240,15 @@ func TestSyncClusterStatus(t *testing.T) {
 	case msg = <-ctx.SyncChan:
 	}
 
-	assert.Equal(t, msg.Head.Command, clustermessage.CommandType_EdgeReport)
-	assert.Equal(t, msg.Head.ClusterName, expectClusterName)
+	assert.Equal(t, clustermessage.CommandType_EdgeReport, msg.Head.Command)
+	assert.Equal(t, expectClusterName, msg.Head.ClusterName)
 
 	result := []Report{}
 	err = json.Unmarshal(msg.Body, &result)
 	assert.NoError(t, err)
 	assert.Len(t, result, 1)
 
-	status := ClusterStatus{}
+	status := otev1.ClusterStatus{}
 	err = json.Unmarshal(result[0].Body, &status)
 	assert.NoError(t, err)
 

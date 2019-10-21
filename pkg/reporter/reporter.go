@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/informers"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
@@ -71,19 +70,6 @@ type NodeResourceStatus struct {
 	DelMap map[string]*corev1.Node `json:"delMap"`
 	// FullList stores full resource obj.
 	FullList []*corev1.Node `json:"fullList"`
-}
-
-// ClusterResource represents the resources of a cluster.
-type ClusterResource struct {
-	// Capacity represents the total resources of a cluster.
-	Capacity map[corev1.ResourceName]*resource.Quantity `json:"capacity"`
-	// Allocatable represents the resources of a cluster that are available for scheduling.
-	Allocatable map[corev1.ResourceName]*resource.Quantity `json:"allocatable"`
-}
-
-// ClusterStatus represents information about the status of a cluster.
-type ClusterStatus struct {
-	ClusterResource
 }
 
 //TODO: more resource structure definitions.
