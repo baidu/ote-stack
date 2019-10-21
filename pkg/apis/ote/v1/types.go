@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,6 +40,9 @@ const (
 	ClusterControllerDestUnregistCluster = "unregist" // cluster unregist
 	ClusterControllerDestClusterRoute    = "route"    // cluster route
 	ClusterControllerDestClusterSubtree  = "subtree"  // cluster subtree
+
+	ClusterStatusOnline  = "online"
+	ClusterStatusOffline = "offine"
 )
 
 // ClusterNamespace defines the namespace of k8s crd must be in.
@@ -111,6 +116,15 @@ type ClusterSpec struct {
 type ClusterStatus struct {
 	Status    string `json:"status"`
 	Timestamp int64  `json:"timestamp"`
+	ClusterResource
+}
+
+// ClusterResource represents the resources of a cluster.
+type ClusterResource struct {
+	// Capacity represents the total resources of a cluster.
+	Capacity map[corev1.ResourceName]*resource.Quantity `json:"capacity"`
+	// Allocatable represents the resources of a cluster that are available for scheduling.
+	Allocatable map[corev1.ResourceName]*resource.Quantity `json:"allocatable"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -153,6 +167,25 @@ func (c *Cluster) Serialize() ([]byte, error) {
 // ClusterDeserialize deserialize Cluster using json.
 func ClusterDeserialize(b []byte) (*Cluster, error) {
 	c := Cluster{}
+	err := json.Unmarshal(b, &c)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// Serialize serialize ClusterStatus using json.
+func (c *ClusterStatus) Serialize() ([]byte, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+// ClusterStatusDeserialize deserialize ClusterStatus using json.
+func ClusterStatusDeserialize(b []byte) (*ClusterStatus, error) {
+	c := ClusterStatus{}
 	err := json.Unmarshal(b, &c)
 	if err != nil {
 		return nil, err

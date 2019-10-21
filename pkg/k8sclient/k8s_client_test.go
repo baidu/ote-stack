@@ -81,6 +81,20 @@ func TestClusterCRD(t *testing.T) {
 	clusterCRD.Delete(cluster1)
 	o = clusterCRD.Get("default", "c1")
 	assert.Nil(t, o)
+
+	set := &otev1.Cluster{
+		ObjectMeta: cluster2.ObjectMeta,
+		Status: otev1.ClusterStatus{
+			Timestamp: 11111111,
+			Status:    otev1.ClusterStatusOffline,
+		},
+	}
+
+	err := clusterCRD.UpdateStatus(set)
+	assert.Nil(t, err)
+	o = clusterCRD.Get(set.Namespace, set.Name)
+	assert.NotNil(t, o)
+	assert.Equal(t, set.Status, o.Status)
 }
 
 func TestClusterControllerCRD(t *testing.T) {

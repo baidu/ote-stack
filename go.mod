@@ -46,7 +46,7 @@ require (
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/code-generator v0.0.0-20181117043124-c2090bec4d9b
 	k8s.io/component-base v0.0.0-20190602130718-4ec519775454
-	k8s.io/gengo v0.0.0-20190327210449-e17681d19d3a // indirect
+	k8s.io/gengo v0.0.0-20191010091904-7fa3014cb28f // indirect
 	k8s.io/klog v0.3.2
 	k8s.io/kube-openapi v0.0.0-20190603182131-db7b694dc208 // indirect
 	k8s.io/utils v0.0.0-20190308190857-21c4ce38f2a7 // indirect

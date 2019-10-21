@@ -24,6 +24,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
@@ -33,12 +34,16 @@ const (
 
 // UpstreamProcessor processes msg from root cluster controller.
 type UpstreamProcessor struct {
-	ctx *K8sContext
+	ctx        *K8sContext
+	clusterCRD *k8sclient.ClusterCRD
 }
 
 // NewUpstreamProcessor new a UpstreamProcessor with k8s context.
 func NewUpstreamProcessor(ctx *K8sContext) *UpstreamProcessor {
-	return &UpstreamProcessor{ctx: ctx}
+	return &UpstreamProcessor{
+		ctx:        ctx,
+		clusterCRD: k8sclient.NewClusterCRD(ctx.OteClient),
+	}
 }
 
 // HandleReceivedMessage processes msg from root cluster controller.
@@ -91,6 +96,9 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 		case reporter.ResourceTypeNode:
 			err = u.handleNodeReport(report.Body)
 			klog.Errorf("handleNodeReport failed: %v", err)
+		case reporter.ResourceTypeClusterStatus:
+			err = u.handleClusterStatusReport(msg.Head.ClusterName, report.Body)
+			klog.Errorf("handleClusterStatusReport failed: %v", err)
 		default:
 			klog.Errorf("processEdgeReport failed, reource type(%d) not support", report.ResourceType)
 		}

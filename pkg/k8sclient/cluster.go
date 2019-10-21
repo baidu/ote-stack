@@ -17,7 +17,10 @@ limitations under the License.
 package k8sclient
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
@@ -67,4 +70,23 @@ func (c *ClusterCRD) Update(cluster *otev1.Cluster) {
 	if err != nil {
 		klog.Errorf("update cluster(%v) failed: %v", cluster, err)
 	}
+}
+
+// UpdateStatus updates cluster status.
+func (c *ClusterCRD) UpdateStatus(newcluster *otev1.Cluster) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		oldcluster, err := c.client.OteV1().Clusters(newcluster.Namespace).Get(newcluster.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get original cluster(%s-%s) failed: %v",
+				newcluster.Namespace, newcluster.Name, err)
+		}
+
+		if newcluster.Status.Timestamp <= oldcluster.Status.Timestamp {
+			return fmt.Errorf("timestamp(%d) is too old while current timestamp is %d",
+				newcluster.Status.Timestamp, oldcluster.Status.Timestamp)
+		}
+
+		_, err = c.client.OteV1().Clusters(newcluster.ObjectMeta.Namespace).UpdateStatus(newcluster)
+		return err
+	})
 }

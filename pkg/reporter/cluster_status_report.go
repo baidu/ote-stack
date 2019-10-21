@@ -17,7 +17,6 @@ limitations under the License.
 package reporter
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
+	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 )
 
@@ -80,17 +80,20 @@ func (c *ClusterStatusReporter) Run(stopCh <-chan struct{}) {
 }
 
 func (c *ClusterStatusReporter) syncClusterStatus() {
+	status := &otev1.ClusterStatus{
+		Timestamp: time.Now().Unix(),
+		Status:    otev1.ClusterStatusOnline,
+	}
+
 	list, err := c.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		klog.Errorf("can not list node: %v", err)
-		return
+		status.Status = otev1.ClusterStatusOffline
+	} else {
+		status.ClusterResource = *caculateClusterResource(list)
 	}
 
-	status := &ClusterStatus{
-		ClusterResource: *caculateClusterResource(list),
-	}
-
-	clusterStatusJSON, err := json.Marshal(status)
+	clusterStatusJSON, err := status.Serialize()
 	if err != nil {
 		klog.Errorf("serialize cluster status failed: %v", err)
 		return
@@ -129,8 +132,8 @@ func isNodeReady(node *corev1.Node) bool {
 	return false
 }
 
-func caculateClusterResource(nodes *corev1.NodeList) *ClusterResource {
-	clusterResource := &ClusterResource{
+func caculateClusterResource(nodes *corev1.NodeList) *otev1.ClusterResource {
+	clusterResource := &otev1.ClusterResource{
 		Capacity:    make(map[corev1.ResourceName]*resource.Quantity),
 		Allocatable: make(map[corev1.ResourceName]*resource.Quantity),
 	}
