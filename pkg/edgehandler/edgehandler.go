@@ -93,7 +93,7 @@ func (e *edgeHandler) Start() error {
 
 	if e.isRemoteShim() {
 		klog.Infof("init remote shim client")
-		e.shimClient = clustershim.NewRemoteShimClient(e.conf.RemoteShimAddr)
+		e.shimClient = clustershim.NewRemoteShimClient(e.conf.ClusterName, e.conf.RemoteShimAddr)
 	} else {
 		klog.Infof("init local shim client")
 		e.shimClient = clustershim.NewlocalShimClient(e.conf)
