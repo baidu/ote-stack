@@ -86,7 +86,8 @@ func (c *ClusterCRD) UpdateStatus(newcluster *otev1.Cluster) error {
 				newcluster.Status.Timestamp, oldcluster.Status.Timestamp)
 		}
 
-		_, err = c.client.OteV1().Clusters(newcluster.ObjectMeta.Namespace).UpdateStatus(newcluster)
+		oldcluster.Status = newcluster.Status
+		_, err = c.client.OteV1().Clusters(oldcluster.Namespace).Update(oldcluster)
 		return err
 	})
 }

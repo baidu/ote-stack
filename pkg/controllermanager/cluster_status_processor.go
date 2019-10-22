@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 )
@@ -30,7 +31,14 @@ func (u *UpstreamProcessor) handleClusterStatusReport(clustername string, status
 		return fmt.Errorf("status body of cluster %s deserialize failed : %v", clustername, err)
 	}
 
-	return u.UpdateClusterStatus(clustername, status)
+	klog.V(3).Infof("update cluster status: name=%s, status=%v", clustername, status)
+
+	err = u.UpdateClusterStatus(clustername, status)
+	if err != nil {
+		return fmt.Errorf("update cluster % status failed : %v", clustername, err)
+	}
+
+	return nil
 }
 
 // UpdateClusterStatus update status of the given cluster.
