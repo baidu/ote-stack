@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	clusterrouter "github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/config"
 )
@@ -142,4 +144,11 @@ func TestChooseParentNeighbor(t *testing.T) {
 			t.Errorf("[%q] expected %v, got %v", ct.Name, ct.ExpectParent, tun.cloudAddr)
 		}
 	}
+}
+
+func TestCloudBlackList_Clear(t *testing.T) {
+	defaultCloudBlackList.Push("c1")
+	defaultCloudBlackList.Clear()
+	ret := defaultCloudBlackList.Find("c1")
+	assert.Equal(t, false, ret)
 }

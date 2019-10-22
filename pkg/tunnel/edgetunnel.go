@@ -153,6 +153,9 @@ func (e *edgeTunnel) reconnect() {
 		}
 		break
 	}
+
+	// cloud address is not needed in black list after connecting to a parent.
+	defaultCloudBlackList.Clear()
 }
 func (e *edgeTunnel) Start() error {
 	if err := e.connect(); err != nil {
@@ -269,4 +272,13 @@ func (c *CloudBlackList) Pop() string {
 func (c *CloudBlackList) Find(key string) bool {
 	_, ok := c.addrMap[key]
 	return ok
+}
+
+// Clear all cloud address in the list.
+func (c *CloudBlackList) Clear() {
+	c.addrList.Init()
+
+	for key := range c.addrMap {
+		delete(c.addrMap, key)
+	}
 }

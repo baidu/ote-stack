@@ -441,3 +441,29 @@ func newFakeNoRootClusterHandler(t *testing.T) *clusterHandler {
 	fakeTunn.reset()
 	return ret
 }
+
+func TestIsCandidateParent(t *testing.T) {
+	ret := isInParentPool("c1")
+	assert.Equal(t, false, ret)
+
+	clusterrouter.Router().ParentNeighbor = map[string]string{
+		"c1": "12345",
+	}
+	ret = isInParentPool("c1")
+	assert.Equal(t, true, ret)
+}
+
+func TestCheckName(t *testing.T) {
+	c := &clusterHandler{}
+
+	registry := &config.ClusterRegistry{
+		Name: "c1",
+	}
+
+	clusterrouter.Router().ParentNeighbor = map[string]string{
+		"c1": "12345",
+	}
+
+	ret := c.checkClusterName(registry)
+	assert.Equal(t, false, ret)
+}
