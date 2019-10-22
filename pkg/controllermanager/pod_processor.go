@@ -106,6 +106,9 @@ func (u *UpstreamProcessor) GetPod(pod *corev1.Pod) (*corev1.Pod, error) {
 
 // CreatePod will create the given pod.
 func (u *UpstreamProcessor) CreatePod(pod *corev1.Pod) error {
+	// ResourceVersion should not be assigned at creation time
+	pod.ResourceVersion = ""
+
 	_, err := u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Create(pod)
 	if err != nil {
 		return err

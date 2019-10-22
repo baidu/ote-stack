@@ -106,6 +106,9 @@ func (u *UpstreamProcessor) GetNode(node *corev1.Node) (*corev1.Node, error) {
 
 // CreateNode will create the given node.
 func (u *UpstreamProcessor) CreateNode(node *corev1.Node) error {
+	// ResourceVersion should not be assigned at creation time
+	node.ResourceVersion = ""
+
 	_, err := u.ctx.K8sClient.CoreV1().Nodes().Create(node)
 	if err != nil {
 		return err
