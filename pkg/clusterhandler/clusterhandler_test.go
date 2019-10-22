@@ -17,6 +17,7 @@ limitations under the License.
 package clusterhandler
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -237,6 +238,12 @@ func TestHandleMessageFromChild(t *testing.T) {
 	assert.Nil(t, err)
 	err = c.handleMessageFromChild("c1", ccbytes)
 	assert.Nil(t, err)
+	// subtree route from child
+	msg.Head.Command = clustermessage.CommandType_SubTreeRoute
+	ccbytes, err = proto.Marshal(msg)
+	assert.Nil(t, err)
+	err = c.handleMessageFromChild("c1", ccbytes)
+	assert.Nil(t, err)
 }
 
 func TestControllerMsgHandler(t *testing.T) {
@@ -260,6 +267,95 @@ func TestControllerMsgHandler(t *testing.T) {
 	assert.Nil(t, err)
 	err = c.controllerMsgHandler("c1", ccbytes)
 	assert.NotNil(t, err)
+}
+
+func TestHandleRegistClusterMessage(t *testing.T) {
+	assert := assert.New(t)
+	c := newFakeRootClusterHandler(t)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{},
+	}
+	// cannot get cluster regist info from msg
+	err := c.handleRegistClusterMessage("c1", msg)
+	assert.NotNil(err)
+	// add to route
+	cr := &config.ClusterRegistry{
+		Name: "c1",
+		Time: time.Now().Unix(),
+	}
+	ccbytes, err := json.Marshal(cr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.handleRegistClusterMessage("c1", msg)
+	assert.Nil(err)
+	// add a renamed cluster from a different port
+	err = c.handleRegistClusterMessage("c2", msg)
+	assert.NotNil(err)
+	// add a renamed cluster from the same port with same timestamp
+	err = c.handleRegistClusterMessage("c1", msg)
+	assert.NotNil(err)
+	// add a renamed cluster from the same port with large timestamp
+	cr.Time += 1
+	ccbytes, err = json.Marshal(cr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.handleRegistClusterMessage("c1", msg)
+	assert.Nil(err)
+}
+
+func TestHandleUnregistClusterMessage(t *testing.T) {
+	assert := assert.New(t)
+	c := newFakeRootClusterHandler(t)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{},
+	}
+	// msg with no cr
+	err := c.handleUnregistClusterMessage("c1", msg)
+	assert.NotNil(err)
+	// msg with cr
+	cr := &config.ClusterRegistry{
+		Name: "c1",
+		Time: time.Now().Unix(),
+	}
+	ccbytes, err := json.Marshal(cr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.handleUnregistClusterMessage("c1", msg)
+	assert.Nil(err)
+	err = c.handleRegistClusterMessage("c1", msg)
+	assert.Nil(err)
+	// update old cluster status success
+	cr.Time += 1
+	ccbytes, err = json.Marshal(cr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.handleUnregistClusterMessage("c1", msg)
+	assert.Nil(err)
+	// update old cluster status failed
+	cr.Time -= 1
+	ccbytes, err = json.Marshal(cr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.handleUnregistClusterMessage("c1", msg)
+	assert.NotNil(err)
+}
+
+func TestUpdateRouteToSubtree(t *testing.T) {
+	assert := assert.New(t)
+	c := newFakeRootClusterHandler(t)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{ClusterName: "c1"},
+	}
+	// empty subtree route
+	err := c.updateRouteToSubtree(msg)
+	assert.NotNil(err)
+	// not empty subtree route
+	sr := clusterrouter.SubTreeRouter{"c2": "c1"}
+	ccbytes, err := json.Marshal(sr)
+	assert.Nil(err)
+	msg.Body = ccbytes
+	err = c.updateRouteToSubtree(msg)
+	assert.Nil(err)
 }
 
 type fakeCloudTunnel struct {

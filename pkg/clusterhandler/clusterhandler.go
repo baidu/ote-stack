@@ -363,14 +363,7 @@ func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret
 		// TODO do not access k8s in cluster controller
 		ret = c.handleUnregistClusterMessage(client, msg)
 	case clustermessage.CommandType_SubTreeRoute:
-		if clusterrouter.Router().HasChild(msg.Head.ParentClusterName) {
-			// if this is a subtree message and myself is grandparent of the cluster
-			// check router to subtree
-			c.updateRouteToSubtree(msg, false)
-		} else if clusterrouter.Router().HasChild(msg.Head.ClusterName) {
-			c.updateRouteToSubtree(msg, true)
-			c.transmitToParent(msg)
-		}
+		c.updateRouteToSubtree(msg)
 	default:
 		if c.isRoot() {
 			// send to controller manager
@@ -420,11 +413,6 @@ func (c *clusterHandler) handleRegistClusterMessage(
 	client string, msg *clustermessage.ClusterMessage) (ret error) {
 	ret = nil
 	cr := getClusterRegistryFromClusterMessage(msg)
-	if cr == nil {
-		ret = fmt.Errorf("regist message cannot get cluster info")
-		klog.Error(ret)
-		return
-	}
 	cluster := getClusterFromClusterRegistry(cr)
 	if cluster == nil {
 		ret = fmt.Errorf("regist message cannot get cluster info")
@@ -432,17 +420,35 @@ func (c *clusterHandler) handleRegistClusterMessage(
 		return
 	}
 
-	clusterrouter.Router().AddRoute(cr.Name, client)
+	// add the cluster to router
+	// and if failed to add, do not transmit to parent or save to k8s
+	err := clusterrouter.Router().AddRoute(cr.Name, client)
+	if err != nil {
+		// handle rename situation
+		// TODO make the new one reconnect
+		ret = fmt.Errorf("add route failed: %v", err)
+		klog.Error(ret)
+		return
+	}
 
 	if c.isRoot() {
-		// TODO handle rename situation
 		old := c.clusterCRD.Get(cluster.ObjectMeta.Namespace, cluster.ObjectMeta.Name)
 		if old == nil {
+			cluster.Status.Status = otev1.ClusterStatusOnline
+			cluster.Status.Timestamp = time.Now().Unix()
 			c.clusterCRD.Create(cluster)
 		} else {
-			// there is may be a duplicated-name cluster
-			// drop the new one
-			// TODO make the new one reconnect
+			// update cluster status to online
+			old.Status.Status = otev1.ClusterStatusOnline
+			old.Status.Timestamp = cluster.Status.Timestamp
+			old.Status.Listen = cluster.Status.Listen
+			old.Status.ParentName = cluster.Status.ParentName
+			err = c.clusterCRD.UpdateStatus(old)
+			if err != nil {
+				ret = fmt.Errorf("update cluster status failed: %v", err)
+				klog.Error(err)
+				return
+			}
 		}
 	} else {
 		c.transmitToParent(msg)
@@ -493,11 +499,6 @@ func (c *clusterHandler) handleUnregistClusterMessage(
 	client string, msg *clustermessage.ClusterMessage) (ret error) {
 	ret = nil
 	cr := getClusterRegistryFromClusterMessage(msg)
-	if cr == nil {
-		ret = fmt.Errorf("unregist message cannot get cluster info")
-		klog.Error(ret)
-		return
-	}
 	cluster := getClusterFromClusterRegistry(cr)
 	if cluster == nil {
 		ret = fmt.Errorf("unregist message cannot get cluster info")
@@ -508,7 +509,18 @@ func (c *clusterHandler) handleUnregistClusterMessage(
 	clusterrouter.Router().DelRoute(cluster.ObjectMeta.Name, client)
 
 	if c.isRoot() {
-		c.clusterCRD.Delete(cluster)
+		old := c.clusterCRD.Get(cluster.ObjectMeta.Namespace, cluster.ObjectMeta.Name)
+		if old != nil {
+			// update to offline status
+			old.Status.Status = otev1.ClusterStatusOffline
+			old.Status.Timestamp = cr.Time
+			err := c.clusterCRD.UpdateStatus(old)
+			if err != nil {
+				ret = fmt.Errorf("update cluster status failed: %v", err)
+				klog.Error(err)
+				return
+			}
+		}
 	} else {
 		c.transmitToParent(msg)
 	}
@@ -591,35 +603,31 @@ func getClusterFromClusterRegistry(cr *config.ClusterRegistry) *otev1.Cluster {
 			Namespace: otev1.ClusterNamespace,
 		},
 		Spec: otev1.ClusterSpec{
-			Name:       cr.UserDefineName,
-			Listen:     cr.Listen,
-			ParentName: cr.ParentName,
+			Name: cr.UserDefineName,
 		},
 		Status: otev1.ClusterStatus{
-			Timestamp: cr.Time,
+			Listen:     cr.Listen,
+			ParentName: cr.ParentName,
+			Timestamp:  cr.Time,
 		},
 	}
 }
 
-// updateRouteToSubtree updates router to subtree of child or grandchild.
-// childOrGrandChild is true if it is child, false if it is grandchild
-func (c *clusterHandler) updateRouteToSubtree(
-	msg *clustermessage.ClusterMessage, childOrGrandChild bool) {
+// updateRouteToSubtree updates router to subtree of child.
+func (c *clusterHandler) updateRouteToSubtree(msg *clustermessage.ClusterMessage) error {
 	subtrees := clusterrouter.SubtreeFromClusterController(msg)
 	if subtrees == nil {
-		return
+		return fmt.Errorf("subtree route is empty")
 	}
 	var err error
 	for to := range subtrees {
-		if childOrGrandChild {
-			err = clusterrouter.Router().AddRoute(to, msg.Head.ClusterName)
-		} else {
-			err = clusterrouter.Router().AddRoute(to, msg.Head.ParentClusterName)
-		}
+		err = clusterrouter.Router().AddRoute(to, msg.Head.ClusterName)
 		if err != nil {
-			klog.Errorf("add subtree router %s-%s failed: %v", to, msg.Head.ParentClusterName, err)
+			klog.Errorf("add subtree router %s-%s failed: %v", to, msg.Head.ClusterName, err)
 		}
 	}
+	// do not return part of err in for cycle
+	return nil
 }
 
 func (c *clusterHandler) controllerMsgHandler(clientName string, data []byte) error {

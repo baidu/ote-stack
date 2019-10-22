@@ -105,17 +105,15 @@ type Cluster struct {
 
 // ClusterSpec is specification of a Cluster.
 type ClusterSpec struct {
-	Name       string `json:"name"`
-	Listen     string `json:"listen"`
-	ParentName string `json:"parentName"`
-	// Childs describes the relation of cluster name to its websocket listen address.
-	Childs map[string]string `json:"childs"`
+	Name string `json:"name"`
 }
 
 // ClusterStatus is status of a Cluster.
 type ClusterStatus struct {
-	Status    string `json:"status"`
-	Timestamp int64  `json:"timestamp"`
+	Listen     string `json:"listen"`
+	ParentName string `json:"parentName"`
+	Status     string `json:"status"`
+	Timestamp  int64  `json:"timestamp"`
 	ClusterResource
 }
 

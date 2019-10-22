@@ -46,6 +46,7 @@ type EdgeTunnel interface {
 	// Regist registers receive message handler.
 	RegistReceiveMessageHandler(TunnelReadMessageFunc)
 	RegistAfterConnectToHook(fn AfterConnectToHook)
+	RegistAfterDisconnectHook(fn AfterDisconnectHook)
 }
 
 // edgeTunnel is responsible for communication with cloudTunnel.
@@ -59,6 +60,7 @@ type edgeTunnel struct {
 
 	receiveMessageHandler TunnelReadMessageFunc
 	afterConnectToHook    AfterConnectToHook
+	afterDisconnectHook   AfterDisconnectHook
 }
 
 // NewEdgeTunnel returns a new edgeTunnel object.
@@ -72,13 +74,14 @@ func NewEdgeTunnel(conf *config.ClusterControllerConfig) EdgeTunnel {
 			klog.Info(string(msg))
 			return nil
 		},
-		afterConnectToHook: func() {},
+		afterConnectToHook:  func() {},
+		afterDisconnectHook: func() {},
 	}
 
 }
 
 func (e *edgeTunnel) connect() error {
-	e.uuid = fmt.Sprintf("%s-%d", e.name, time.Now().Unix())
+	e.uuid = e.name
 	u := url.URL{Scheme: "ws", Host: e.cloudAddr, Path: accessURI + e.uuid}
 	header := http.Header{}
 	header.Add(config.ClusterConnectHeaderListenAddr, e.listenAddr)
@@ -124,6 +127,10 @@ func (e *edgeTunnel) RegistAfterConnectToHook(fn AfterConnectToHook) {
 	e.afterConnectToHook = fn
 }
 
+func (e *edgeTunnel) RegistAfterDisconnectHook(fn AfterDisconnectHook) {
+	e.afterDisconnectHook = fn
+}
+
 func (e *edgeTunnel) Stop() error {
 	//TODO: graceful stop.
 	return nil
@@ -164,6 +171,9 @@ func (e *edgeTunnel) Start() error {
 	return nil
 }
 
+// handleReceiveMessage reads message from the connection and process it one by one.
+// this function will block until error occurs in the connection,
+// and once error happened, call afterDisconnectHook immediately
 func (e *edgeTunnel) handleReceiveMessage() {
 	klog.V(1).Infof("start handle receive message")
 	for {
@@ -175,6 +185,8 @@ func (e *edgeTunnel) handleReceiveMessage() {
 
 		e.receiveMessageHandler(e.wsclient.Name, msg)
 	}
+	klog.Warningf("disconnect from %s", e.cloudAddr)
+	e.afterDisconnectHook()
 }
 
 // chooseParentNeighbor change cloud addrrss of edge tunnel
