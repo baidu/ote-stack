@@ -91,14 +91,17 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 	for _, report := range reports {
 		switch report.ResourceType {
 		case reporter.ResourceTypePod:
-			err = u.handlePodReport(report.Body)
-			klog.Errorf("handlePodReport failed: %v", err)
+			if err = u.handlePodReport(report.Body); err != nil {
+				klog.Errorf("handlePodReport failed: %v", err)
+			}
 		case reporter.ResourceTypeNode:
-			err = u.handleNodeReport(report.Body)
-			klog.Errorf("handleNodeReport failed: %v", err)
+			if err = u.handleNodeReport(report.Body); err != nil {
+				klog.Errorf("handleNodeReport failed: %v", err)
+			}
 		case reporter.ResourceTypeClusterStatus:
-			err = u.handleClusterStatusReport(msg.Head.ClusterName, report.Body)
-			klog.Errorf("handleClusterStatusReport failed: %v", err)
+			if err = u.handleClusterStatusReport(msg.Head.ClusterName, report.Body); err != nil {
+				klog.Errorf("handleClusterStatusReport failed: %v", err)
+			}
 		default:
 			klog.Errorf("processEdgeReport failed, reource type(%d) not support", report.ResourceType)
 		}
