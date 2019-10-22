@@ -287,12 +287,29 @@ func (c *clusterHandler) handleMessageFromParent() {
 	}
 }
 
+// isInParentPool check if the connecting client is in the parent pool,
+// because cluster does not allow its candidate parent to be it's child.
+func isInParentPool(clientName string) bool {
+	for name := range clusterrouter.Router().ParentNeighbors() {
+		// if client is found in ParentNeighbors router, it is a candidate parent cluster.
+		if clientName == name {
+			return true
+		}
+	}
+
+	return false
+}
+
 /*
 checkClusterName runs before stablish a connection to a child.
 regist to cloud tunnel before Start it.
 */
 func (c *clusterHandler) checkClusterName(cr *config.ClusterRegistry) bool {
 	if cr == nil {
+		return false
+	}
+
+	if isInParentPool(cr.Name) {
 		return false
 	}
 
