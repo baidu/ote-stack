@@ -454,3 +454,53 @@ func TestReportSubTree(t *testing.T) {
 		e.reportSubTreeTimer()
 	}
 }
+
+func TestStart(t *testing.T) {
+	casetest := []struct {
+		Name      string
+		Conf      *config.ClusterControllerConfig
+		ExpectErr bool
+	}{
+		{
+			Name: "clustername is root",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+			},
+			ExpectErr: true,
+		},
+		{
+			Name: "conf in invalid",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             nil,
+			},
+			ExpectErr: true,
+		},
+		{
+			Name: "shim server is not ready",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             nil,
+				RemoteShimAddr:        ":8080",
+				ParentCluster:         "127.0.0.1:8287",
+			},
+			ExpectErr: true,
+		},
+	}
+
+	for _, ct := range casetest {
+		t.Run(ct.Name, func(t *testing.T) {
+			assert := assert.New(t)
+			hdl := NewEdgeHandler(ct.Conf)
+			err := hdl.Start()
+			if ct.ExpectErr {
+				assert.Error(err)
+			} else {
+				assert.NoError(err)
+			}
+		})
+	}
+}

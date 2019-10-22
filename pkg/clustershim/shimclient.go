@@ -25,8 +25,8 @@ import (
 	"github.com/gorilla/websocket"
 	"k8s.io/klog"
 
-	"github.com/baidu/ote-stack/pkg/clustermessage"
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
+	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/clustershim/handler"
 	"github.com/baidu/ote-stack/pkg/config"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
@@ -35,7 +35,6 @@ import (
 
 const (
 	shimRespChanLen = 100
-	shimClientName  = "clustercontroller"
 )
 
 // ShimServiceClient is the client interface to a cluster shim.
@@ -82,7 +81,7 @@ func NewlocalShimClientWithHandler(handlers ShimHandler) ShimServiceClient {
 	}
 }
 
-func (s *localShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {      
+func (s *localShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
 	switch in.Head.Command {
 	case clustermessage.CommandType_ControlReq:
 		return s.DoControlRequest(in)
@@ -93,7 +92,7 @@ func (s *localShimClient) Do(in *clustermessage.ClusterMessage) (*clustermessage
 	}
 }
 
-func (s *localShimClient) DoControlRequest(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {	
+func (s *localShimClient) DoControlRequest(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
 	head := proto.Clone(in.Head).(*clustermessage.MessageHead)
 	head.Command = clustermessage.CommandType_ControlResp
 
@@ -108,7 +107,7 @@ func (s *localShimClient) DoControlRequest(in *clustermessage.ClusterMessage) (*
 		resp, err := h.Do(in)
 		if resp != nil {
 			resp.Head.Command = clustermessage.CommandType_ControlResp
-		}	
+		}
 		return resp, err
 	}
 
@@ -136,7 +135,7 @@ func (s *localShimClient) ReturnChan() <-chan *clustermessage.ClusterMessage {
 }
 
 // NewRemoteShimClient returns a remote shim client which is connecting to addr.
-func NewRemoteShimClient(addr string) ShimServiceClient {
+func NewRemoteShimClient(shimClientName, addr string) ShimServiceClient {
 	u := url.URL{
 		Scheme: "ws",
 		Host:   addr,
