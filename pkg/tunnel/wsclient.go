@@ -60,6 +60,9 @@ type AfterConnectHook func(*config.ClusterRegistry)
 // AfterConnectToHook is a function of edge tunnel to call after connection established.
 type AfterConnectToHook func()
 
+// AfterDisconnectHook is a function of edge tunnel to call after disconnect from parent.
+type AfterDisconnectHook func()
+
 // NewWSClient returns a websocket client.
 func NewWSClient(name string, conn *websocket.Conn) *WSClient {
 	wsclient := &WSClient{

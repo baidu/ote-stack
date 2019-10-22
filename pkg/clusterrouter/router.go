@@ -169,8 +169,8 @@ func (cr *ClusterRouter) AddRoute(to, port string) error {
 
 	if oldPort, ok := cr.subtreeRouter[to]; !ok {
 		cr.subtreeRouter[to] = port
-	} else {
-		// there is a same name child, refuse to add
+	} else if port != oldPort {
+		// there is a same name child to a diffrent port, refuse to add
 		klog.Errorf(
 			"route to %s already exist from port %s, add route %s-%s failed",
 			to, oldPort, to, port)

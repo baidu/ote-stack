@@ -16,13 +16,16 @@ spec:
   additionalPrinterColumns:
     - name: Listen
       type: string
-      JSONPath: .spec.listen
+      JSONPath: .status.listen
     - name: Parent
       type: string
-      JSONPath: .spec.parentName
+      JSONPath: .status.parentName
     - name: UserDefineName
       type: string
       JSONPath: .spec.name
+    - name: Status
+      type: string
+      JSONPath: .status.status
     - name: Age
       type: date
       JSONPath: .metadata.creationTimestamp
@@ -32,8 +35,6 @@ spec:
         spec:
           properties:
             name:
-              type: string
-            listen:
               type: string
   version: v1
 

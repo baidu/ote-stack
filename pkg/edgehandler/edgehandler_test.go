@@ -17,6 +17,7 @@ limitations under the License.
 package edgehandler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+	"github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/clustershim"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
@@ -35,9 +37,11 @@ import (
 var (
 	edgeTunnelMsg = []byte("msg")
 	LastSend      clustermessage.ClusterMessage
+	LastSendPtr   = &clustermessage.ClusterMessage{}
 )
 
 type fakeEdgeTunnel struct {
+	fakeEdgeTunnelSendChan chan struct{}
 }
 
 type fakeShimHandler struct {
@@ -50,6 +54,10 @@ func (f *fakeEdgeTunnel) Send(data []byte) error {
 		return err
 	}
 	LastSend = *msg
+	*LastSendPtr = *msg
+	if f.fakeEdgeTunnelSendChan != nil {
+		f.fakeEdgeTunnelSendChan <- struct{}{}
+	}
 	return nil
 }
 
@@ -58,6 +66,10 @@ func (f *fakeEdgeTunnel) RegistReceiveMessageHandler(tunnel.TunnelReadMessageFun
 }
 
 func (f *fakeEdgeTunnel) RegistAfterConnectToHook(tunnel.AfterConnectToHook) {
+	return
+}
+
+func (f *fakeEdgeTunnel) RegistAfterDisconnectHook(tunnel.AfterDisconnectHook) {
 	return
 }
 
@@ -71,23 +83,23 @@ func (f *fakeEdgeTunnel) Stop() error {
 
 func (f *fakeShimHandler) Do(in *clustermessage.ClusterMessage) (*clustermessage.ClusterMessage, error) {
 	head := &clustermessage.MessageHead{
-		MessageID:           in.Head.MessageID,
-		Command:             clustermessage.CommandType_ControlResp,
-		ParentClusterName:   in.Head.ParentClusterName,      
+		MessageID:         in.Head.MessageID,
+		Command:           clustermessage.CommandType_ControlResp,
+		ParentClusterName: in.Head.ParentClusterName,
 	}
 
 	resp := &clustermessage.ControllerTaskResponse{
-            Timestamp:  time.Now().Unix(),
-            StatusCode: 200,
-			Body:       []byte(""),
+		Timestamp:  time.Now().Unix(),
+		StatusCode: 200,
+		Body:       []byte(""),
 	}
 
-	data, err := proto.Marshal(resp)		
-    if err != nil {
+	data, err := proto.Marshal(resp)
+	if err != nil {
 		klog.Errorf("shim resp to controller task resp failed: %v", err)
-		return &clustermessage.ClusterMessage{Head: head,}, nil
+		return &clustermessage.ClusterMessage{Head: head}, nil
 	}
-	
+
 	msg := &clustermessage.ClusterMessage{
 		Head: head,
 		Body: data,
@@ -404,8 +416,41 @@ func TestHandleMessage(t *testing.T) {
 			ParentClusterName: "root",
 			Command:           clustermessage.CommandType_ControlMultiReq,
 		},
-		Body:	controllerAPITaskData,
+		Body: controllerAPITaskData,
 	}
 	err = edge.handleMessage(msg)
 	assert.Nil(t, err)
+}
+
+func TestReportSubTree(t *testing.T) {
+	eInf := NewEdgeHandler(&config.ClusterControllerConfig{
+		ClusterName: "c1",
+	})
+	e, ok := eInf.(*edgeHandler)
+	assert.True(t, ok)
+	f := &fakeEdgeTunnel{
+		fakeEdgeTunnelSendChan: make(chan struct{}, 1),
+	}
+	e.edgeTunnel = f
+	// add route
+	clusterrouter.Router().AddRoute("c1", "c2")
+	go func() {
+		// get a subtree msg
+		msg := <-f.fakeEdgeTunnelSendChan
+		assert.Equal(t, struct{}{}, msg)
+		//fmt.Printf("lastsendptr: %v\n", LastSendPtr)
+		assert.Equal(t, e.conf.ClusterName, LastSendPtr.Head.ClusterName)
+		// stop the timer
+		e.stopReportSubtree <- struct{}{}
+	}()
+	timer := time.NewTimer(5 * time.Second)
+	startReport := make(chan struct{}, 1)
+	startReport <- struct{}{}
+	select {
+	case <-timer.C:
+		assert.Error(t, fmt.Errorf("%v timeout", t))
+	case <-startReport:
+		// this function will blocked until stop it or timeout
+		e.reportSubTreeTimer()
+	}
 }

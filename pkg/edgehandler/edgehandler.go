@@ -34,6 +34,10 @@ import (
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
+var (
+	subtreeReportDuration = 1 * time.Minute
+)
+
 // EdgeHandler is edgehandler interface that process messages from tunnel and transmit to shim.
 type EdgeHandler interface {
 	// Start will start edgehandler.
@@ -42,14 +46,18 @@ type EdgeHandler interface {
 
 // edgeHandler processes message from tunnel and transmit to shim.
 type edgeHandler struct {
-	conf       *config.ClusterControllerConfig
-	edgeTunnel tunnel.EdgeTunnel
-	shimClient clustershim.ShimServiceClient
+	conf              *config.ClusterControllerConfig
+	edgeTunnel        tunnel.EdgeTunnel
+	shimClient        clustershim.ShimServiceClient
+	stopReportSubtree chan struct{}
 }
 
 // NewEdgeHandler returns a edgeHandler object.
 func NewEdgeHandler(c *config.ClusterControllerConfig) EdgeHandler {
-	return &edgeHandler{conf: c}
+	return &edgeHandler{
+		conf:              c,
+		stopReportSubtree: make(chan struct{}, 1),
+	}
 }
 
 func (e *edgeHandler) valid() error {
@@ -99,6 +107,7 @@ func (e *edgeHandler) Start() error {
 	e.edgeTunnel = tunnel.NewEdgeTunnel(e.conf)
 	e.edgeTunnel.RegistReceiveMessageHandler(e.receiveMessageFromTunnel)
 	e.edgeTunnel.RegistAfterConnectToHook(e.afterConnect)
+	e.edgeTunnel.RegistAfterDisconnectHook(e.afterDisconnect)
 	if err := e.edgeTunnel.Start(); err != nil {
 		return err
 	}
@@ -171,7 +180,7 @@ func (e *edgeHandler) handleMessage(msg *clustermessage.ClusterMessage) error {
 			if err != nil {
 				klog.Errorf("handleTask error: %v", err)
 			}
-		}		
+		}
 		return err
 	case clustermessage.CommandType_ControlMultiReq:
 		klog.V(3).Infof("dispatch ControlMultiReq message to shim")
@@ -200,16 +209,40 @@ func (e *edgeHandler) handleRespFromShimClient() {
 
 	for {
 		resp := <-respChan
-		
+
 		resp.Head.ClusterName = e.conf.ClusterName
-        // send to cloudtunnel.
+		// send to cloudtunnel.
 		e.sendToParent(resp)
 	}
 	klog.Warningf("async return channel from shim client closed")
 }
 
 func (e *edgeHandler) afterConnect() {
+	// start subtree report goroutine
+	go e.reportSubTreeTimer()
+}
+
+func (e *edgeHandler) afterDisconnect() {
+	// stop subtree report goroutine
+	e.stopReportSubtree <- struct{}{}
+}
+
+func (e *edgeHandler) reportSubTreeTimer() {
+	klog.Info("start reporting subtree")
+
+	// call report once and start timer
 	e.reportSubTree()
+
+	ticker := time.NewTicker(subtreeReportDuration)
+	for {
+		select {
+		case <-e.stopReportSubtree:
+			klog.Info("stop reporting subtree")
+			return
+		case <-ticker.C:
+			e.reportSubTree()
+		}
+	}
 }
 
 func (e *edgeHandler) reportSubTree() {
@@ -232,4 +265,3 @@ func (e *edgeHandler) sendToParent(msg *clustermessage.ClusterMessage) error {
 
 	return nil
 }
-
