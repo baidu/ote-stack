@@ -325,14 +325,14 @@ func TestHandleUnregistClusterMessage(t *testing.T) {
 	err = c.handleRegistClusterMessage("c1", msg)
 	assert.Nil(err)
 	// update old cluster status success
-	cr.Time += 1
+	cr.Time++
 	ccbytes, err = json.Marshal(cr)
 	assert.Nil(err)
 	msg.Body = ccbytes
 	err = c.handleUnregistClusterMessage("c1", msg)
 	assert.Nil(err)
 	// update old cluster status failed
-	cr.Time -= 1
+	cr.Time--
 	ccbytes, err = json.Marshal(cr)
 	assert.Nil(err)
 	msg.Body = ccbytes
