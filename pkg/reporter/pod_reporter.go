@@ -179,14 +179,7 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 		return
 	}
 
-	// k8s labels may be nil，need to make it
-	if pod.Labels == nil {
-		pod.Labels = make(map[string]string)
-	}
-
-	pod.Labels[ClusterLabel] = pr.ctx.ClusterName()
-	// support for CM sequential checking
-	pod.Labels[EdgeVersionLabel] = pod.ResourceVersion
+	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {
@@ -207,13 +200,7 @@ func (pr *PodReporter) deletePod(obj interface{}) {
 		return
 	}
 
-	if pod.Labels == nil {
-		pod.Labels = make(map[string]string)
-	}
-
-	pod.Labels[ClusterLabel] = pr.ctx.ClusterName()
-	// support for CM sequential checking
-	pod.Labels[EdgeVersionLabel] = pod.ResourceVersion
+	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {

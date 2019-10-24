@@ -19,6 +19,7 @@ package controllermanager
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
@@ -102,6 +103,22 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 			if err = u.handleClusterStatusReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handleClusterStatusReport failed: %v", err)
 			}
+		case reporter.ResourceTypeDeployment:
+			if err = u.handleDeploymentReport(report.Body); err != nil {
+				klog.Errorf("handleDeploymentReport failed: %v", err)
+			}
+		case reporter.ResourceTypeDaemonset:
+			if err = u.handleDaemonsetReport(report.Body); err != nil {
+				klog.Errorf("handleDaemonsetReport failed: %v", err)
+			}
+		case reporter.ResourceTypeService:
+			if err = u.handleServiceReport(report.Body); err != nil {
+				klog.Errorf("handleServiceReport failed: %v", err)
+			}
+		case reporter.ResourceTypeEvent:
+			if err = u.handleEventReport(report.Body); err != nil {
+				klog.Errorf("handleEventReport failed: %v", err)
+			}
 		default:
 			klog.Errorf("processEdgeReport failed, reource type(%d) not support", report.ResourceType)
 		}
@@ -127,4 +144,47 @@ func UniqueResourceName(obj *metav1.ObjectMeta) error {
 	obj.Name = obj.Name + UniqueResourceNameSeparator + obj.Labels[reporter.ClusterLabel]
 
 	return nil
+}
+
+// checkEdgeVersion checks if resource reported from edge cluster is newer than the one stored in etcd.
+func checkEdgeVersion(reportResource *metav1.ObjectMeta, storedResource *metav1.ObjectMeta) bool {
+	if reportResource.Labels == nil || storedResource.Labels == nil {
+		klog.Errorf("resource's labels is empty")
+		return false
+	}
+
+	if reportResource.Labels[reporter.EdgeVersionLabel] == "" || storedResource.Labels[reporter.EdgeVersionLabel] == "" {
+		klog.Errorf("resource's edge-version is empty")
+		return false
+	}
+
+	edgeVersion, err := strconv.Atoi(reportResource.Labels[reporter.EdgeVersionLabel])
+	if err != nil {
+		klog.Errorf("check edge version failed: %v", err)
+		return false
+	}
+
+	storedVersion, err := strconv.Atoi(storedResource.Labels[reporter.EdgeVersionLabel])
+	if err != nil {
+		klog.Errorf("check edge version failed: %v", err)
+		return false
+	}
+
+	//resource report sequential checking
+	if edgeVersion < storedVersion {
+		klog.Errorf("Current resource's edge-version(%s) is less than or equal to ETCD's resource's edge-version(%s)",
+			reportResource.Labels[reporter.EdgeVersionLabel], storedResource.Labels[reporter.EdgeVersionLabel])
+		return false
+	}
+
+	return true
+}
+
+// adaptToCentralResource adapts the reported resource to the one stored in center etcd before updating it.
+func adaptToCentralResource(reportResource *metav1.ObjectMeta, storedResource *metav1.ObjectMeta) {
+	// The resource updated to etcd should have the same ResourceVersion of the one stored in etcd.
+	reportResource.ResourceVersion = storedResource.ResourceVersion
+
+	// The resource from edge cluster should have the same uid of the one stored in etcd.
+	reportResource.UID = storedResource.UID
 }

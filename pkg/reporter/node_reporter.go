@@ -82,14 +82,7 @@ func (nr *NodeReporter) handleNode(obj interface{}) {
 		return
 	}
 
-	// k8s labels may be nil，need to make it
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
-	node.Labels[ClusterLabel] = nr.ctx.ClusterName()
-	// support for CM sequential checking
-	node.Labels[EdgeVersionLabel] = node.ResourceVersion
+	addLabelToResource(&node.ObjectMeta, nr.ctx)
 
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {
@@ -115,14 +108,8 @@ func (nr *NodeReporter) deleteNode(obj interface{}) {
 		klog.Errorf("Should be Node object but encounter others in deleteNode")
 		return
 	}
-	// k8s labels may be nil，need to make it
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
 
-	node.Labels[ClusterLabel] = nr.ctx.ClusterName()
-	// support for CM sequential checking
-	node.Labels[EdgeVersionLabel] = node.ResourceVersion
+	addLabelToResource(&node.ObjectMeta, nr.ctx)
 
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {

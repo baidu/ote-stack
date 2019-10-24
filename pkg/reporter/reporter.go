@@ -20,7 +20,9 @@ package reporter
 import (
 	"encoding/json"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	kubernetes "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
@@ -74,6 +76,46 @@ type NodeResourceStatus struct {
 
 //TODO: more resource structure definitions.
 
+//DeploymentResourceStatus defines deployment resource status.
+type DeploymentResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]*appsv1.Deployment `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]*appsv1.Deployment `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*appsv1.Deployment `json:"fullList"`
+}
+
+//DaemonsetResourceStatus defines daemonset resource status.
+type DaemonsetResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]*appsv1.DaemonSet `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]*appsv1.DaemonSet `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*appsv1.DaemonSet `json:"fullList"`
+}
+
+//ServiceResourceStatus defines service resource status.
+type ServiceResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]*corev1.Service `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]*corev1.Service `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*corev1.Service `json:"fullList"`
+}
+
+//EventResourceStatus defines event resource status.
+type EventResourceStatus struct {
+	// UpdateMap stores created/updated resource obj.
+	UpdateMap map[string]*corev1.Event `json:"updateMap"`
+	// DelMap stores deleted resource obj.
+	DelMap map[string]*corev1.Event `json:"delMap"`
+	// FullList stores full resource obj.
+	FullList []*corev1.Event `json:"fullList"`
+}
+
 // ReporterContext defines the context object for reporter.
 type ReporterContext struct {
 	// InformerFactory gives access to informers for the reporter.
@@ -99,6 +141,10 @@ func NewReporterInitializers() map[string]InitFunc {
 	reporters["podReporter"] = startPodReporter
 	reporters["clusterStatusReporter"] = startClusterStatusReporter
 	reporters["nodeReporter"] = startNodeReporter
+	reporters["deployment"] = startDeploymentReporter
+	reporters["daemonset"] = startDaemonsetReporter
+	reporters["service"] = startServiceReporter
+	reporters["event"] = startEventReporter
 
 	return reporters
 }
@@ -140,4 +186,16 @@ func (r Reports) ToClusterMessage(clusterName string) (*clustermessage.ClusterMe
 		Body: body,
 	}
 	return msg, nil
+}
+
+// addLabelToResource add labels to the resource before reporting to center.
+func addLabelToResource(resource *metav1.ObjectMeta, ctx *ReporterContext) {
+	// k8s labels may be nil，need to make it
+	if resource.Labels == nil {
+		resource.Labels = make(map[string]string)
+	}
+
+	resource.Labels[ClusterLabel] = ctx.ClusterName()
+	// support for CM sequential checking
+	resource.Labels[EdgeVersionLabel] = resource.ResourceVersion
 }
