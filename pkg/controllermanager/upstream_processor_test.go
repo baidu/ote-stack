@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,6 +42,7 @@ var (
 	codecs             = serializer.NewCodecFactory(scheme)
 	localSchemeBuilder = runtime.SchemeBuilder{
 		corev1.AddToScheme,
+		appsv1.AddToScheme,
 	}
 	addToScheme = localSchemeBuilder.AddToScheme
 )
@@ -166,4 +168,26 @@ func TestUniqueResourceName(t *testing.T) {
 	pod.Labels = make(map[string]string)
 	err = UniqueResourceName(&pod.ObjectMeta)
 	assert.Error(t, err)
+}
+
+func TestAdaptToCentralResource(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-name",
+			UID:             "1234",
+			ResourceVersion: "1",
+		},
+	}
+
+	storedPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-name",
+			UID:             "5678",
+			ResourceVersion: "2",
+		},
+	}
+
+	adaptToCentralResource(&pod.ObjectMeta, &storedPod.ObjectMeta)
+	assert.Equal(t, "5678", string(pod.UID))
+	assert.Equal(t, "2", pod.ResourceVersion)
 }

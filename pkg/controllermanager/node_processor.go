@@ -19,7 +19,6 @@ package controllermanager
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -126,9 +125,8 @@ func (u *UpstreamProcessor) UpdateNode(node *corev1.Node) error {
 		return err
 	}
 
-	err = u.checkNodeEdgeVersion(node, storedNode)
-	if err != nil {
-		return err
+	if !checkEdgeVersion(&node.ObjectMeta, &storedNode.ObjectMeta) {
+		return fmt.Errorf("check node edge version failed")
 	}
 
 	node.ResourceVersion = storedNode.ResourceVersion
@@ -161,30 +159,6 @@ func (u *UpstreamProcessor) CreateOrUpdateNode(node *corev1.Node) error {
 	}
 
 	return u.UpdateNode(node)
-}
-
-func (u *UpstreamProcessor) checkNodeEdgeVersion(node *corev1.Node, storedNode *corev1.Node) error {
-	if node.Labels[reporter.EdgeVersionLabel] == "" || storedNode.Labels[reporter.EdgeVersionLabel] == "" {
-		return fmt.Errorf("node edge-version is empty")
-	}
-	// resource report sequential checking
-	nodeVersion, err := strconv.Atoi(node.Labels[reporter.EdgeVersionLabel])
-	if err != nil {
-		return err
-	}
-
-	storedNodeVersion, err := strconv.Atoi(storedNode.Labels[reporter.EdgeVersionLabel])
-	if err != nil {
-		return err
-	}
-
-	// resource report sequential checking
-	if nodeVersion <= storedNodeVersion {
-		return fmt.Errorf("Current node edge-version(%s) is less than or equal to ETCD's node edge-version(%s)",
-			node.Labels[reporter.EdgeVersionLabel], storedNode.Labels[reporter.EdgeVersionLabel])
-	}
-
-	return nil
 }
 
 // DeleteNode will delete the given node.

@@ -19,7 +19,6 @@ package controllermanager
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -126,9 +125,8 @@ func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
 		return err
 	}
 
-	err = u.checkEdgeVersion(pod, storedPod)
-	if err != nil {
-		return err
+	if !checkEdgeVersion(&pod.ObjectMeta, &storedPod.ObjectMeta) {
+		return fmt.Errorf("check pod edge version failed")
 	}
 
 	pod.ResourceVersion = storedPod.ResourceVersion
@@ -160,30 +158,6 @@ func (u *UpstreamProcessor) CreateOrUpdatePod(pod *corev1.Pod) error {
 	}
 
 	return u.UpdatePod(pod)
-}
-
-func (u *UpstreamProcessor) checkEdgeVersion(pod *corev1.Pod, storedPod *corev1.Pod) error {
-	if pod.Labels[reporter.EdgeVersionLabel] == "" || storedPod.Labels[reporter.EdgeVersionLabel] == "" {
-		return fmt.Errorf("pod edge-version is empty")
-	}
-	// resource report sequential checking
-	podVersion, err := strconv.Atoi(pod.Labels[reporter.EdgeVersionLabel])
-	if err != nil {
-		return err
-	}
-
-	storedPodVersion, err := strconv.Atoi(storedPod.Labels[reporter.EdgeVersionLabel])
-	if err != nil {
-		return err
-	}
-
-	// resource report sequential checking
-	if podVersion <= storedPodVersion {
-		return fmt.Errorf("Current edge-version(%s) is less than or equal to ETCD's edge-version(%s)",
-			pod.Labels[reporter.EdgeVersionLabel], storedPod.Labels[reporter.EdgeVersionLabel])
-	}
-
-	return nil
 }
 
 // DeletePod will delete the given pod.

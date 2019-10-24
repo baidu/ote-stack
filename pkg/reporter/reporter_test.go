@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeinformers "k8s.io/client-go/informers"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
@@ -62,4 +64,24 @@ func TestIsValid(t *testing.T) {
 func TestNewReporterInitializers(t *testing.T) {
 	reporter := NewReporterInitializers()
 	assert.IsType(t, reporter, map[string]InitFunc{})
+}
+
+func TestAddLabelToResource(t *testing.T) {
+	ctx := &ReporterContext{
+		ClusterName: func() string {
+			return "c1"
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			ResourceVersion: "1234",
+		},
+	}
+
+	addLabelToResource(&pod.ObjectMeta, ctx)
+
+	assert.NotNil(t, pod.Labels)
+	assert.Equal(t, "c1", pod.Labels[ClusterLabel])
+	assert.Equal(t, "1234", pod.Labels[EdgeVersionLabel])
 }
