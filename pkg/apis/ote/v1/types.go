@@ -42,7 +42,7 @@ const (
 	ClusterControllerDestClusterSubtree  = "subtree"  // cluster subtree
 
 	ClusterStatusOnline  = "online"
-	ClusterStatusOffline = "offine"
+	ClusterStatusOffline = "offline"
 )
 
 // ClusterNamespace defines the namespace of k8s crd must be in.
@@ -110,9 +110,9 @@ type ClusterSpec struct {
 
 // ClusterStatus is status of a Cluster.
 type ClusterStatus struct {
-	Listen     string `json:"listen"`
-	ParentName string `json:"parentName"`
-	Status     string `json:"status"`
+	Listen     string `json:"listen,omitempty"`
+	ParentName string `json:"parentName,omitempty"`
+	Status     string `json:"status,omitempty"`
 	Timestamp  int64  `json:"timestamp"`
 	ClusterResource
 }
@@ -120,9 +120,9 @@ type ClusterStatus struct {
 // ClusterResource represents the resources of a cluster.
 type ClusterResource struct {
 	// Capacity represents the total resources of a cluster.
-	Capacity map[corev1.ResourceName]*resource.Quantity `json:"capacity"`
+	Capacity map[corev1.ResourceName]*resource.Quantity `json:"capacity,omitempty"`
 	// Allocatable represents the resources of a cluster that are available for scheduling.
-	Allocatable map[corev1.ResourceName]*resource.Quantity `json:"allocatable"`
+	Allocatable map[corev1.ResourceName]*resource.Quantity `json:"allocatable,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
