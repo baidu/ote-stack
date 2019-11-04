@@ -50,8 +50,9 @@ type ControllerTunnel interface {
 
 // controllerTunnel is responsible for communication with cloudTunnel.
 type controllerTunnel struct {
-	cloudAddr string
-	wsclient  *WSClient
+	cloudAddr       string
+	originCloudAddr string // set to setting cloud addr when redirect to another
+	wsclient        *WSClient
 
 	receiveMessageHandler TunnelReadMessageFunc
 	afterConnectToHook    AfterConnectToHook
@@ -88,6 +89,17 @@ func (e *controllerTunnel) connect() error {
 	conn, resp, err := websocket.DefaultDialer.Dial(u.String(), header)
 	if err != nil {
 		if resp != nil {
+			if resp.StatusCode == http.StatusFound {
+				redirectLocation, err := resp.Location()
+				if err != nil {
+					klog.Errorf("failed to redirect, err=%v", err)
+					return err
+				}
+				klog.Infof("redirect to %s", redirectLocation.String())
+				e.originCloudAddr = e.cloudAddr
+				e.cloudAddr = redirectLocation.Host
+				return e.connect()
+			}
 			klog.Errorf("failed to connect to cloudtunnel, code=%v", resp.StatusCode)
 		}
 		return err
@@ -136,6 +148,18 @@ func (e *controllerTunnel) reconnect() {
 		e.connectionHealthCond.L.Lock()
 		e.connectionHealth = false
 		if err := e.connect(); err != nil {
+			// if it has be redirected, try the origin parent first
+			if e.originCloudAddr != "" {
+				// wait for leader elect
+				time.Sleep(1 * time.Second)
+
+				klog.Infof("reconnect to origin parent %s", e.originCloudAddr)
+				e.cloudAddr = e.originCloudAddr
+				e.originCloudAddr = ""
+				e.connectionHealthCond.L.Unlock()
+				e.connectionHealthCond.Signal()
+				continue
+			}
 			klog.Errorf("connect to %s failed, try again after %ds: %s",
 				e.cloudAddr, waitConnection, err.Error())
 			e.connectionHealthCond.L.Unlock()

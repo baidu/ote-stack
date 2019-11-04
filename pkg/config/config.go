@@ -49,6 +49,7 @@ var (
 // ClusterControllerConfig contains config needed by cluster controller.
 type ClusterControllerConfig struct {
 	TunnelListenAddr      string
+	LeaderListenAddr      string
 	ParentCluster         string
 	ClusterName           string
 	ClusterUserDefineName string

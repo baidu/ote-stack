@@ -51,12 +51,13 @@ type EdgeTunnel interface {
 
 // edgeTunnel is responsible for communication with cloudTunnel.
 type edgeTunnel struct {
-	conf       *config.ClusterControllerConfig
-	cloudAddr  string
-	name       string
-	uuid       string
-	listenAddr string
-	wsclient   *WSClient
+	conf            *config.ClusterControllerConfig
+	cloudAddr       string
+	originCloudAddr string // set to setting cloud addr when redirect to another
+	name            string
+	uuid            string
+	listenAddr      string
+	wsclient        *WSClient
 
 	receiveMessageHandler TunnelReadMessageFunc
 	afterConnectToHook    AfterConnectToHook
@@ -92,6 +93,17 @@ func (e *edgeTunnel) connect() error {
 	conn, resp, err := websocket.DefaultDialer.Dial(u.String(), header)
 	if err != nil {
 		if resp != nil {
+			if resp.StatusCode == http.StatusFound {
+				redirectLocation, err := resp.Location()
+				if err != nil {
+					klog.Errorf("failed to redirect, err=%v", err)
+					return err
+				}
+				klog.Infof("redirect to %s", redirectLocation.String())
+				e.originCloudAddr = e.cloudAddr
+				e.cloudAddr = redirectLocation.Host
+				return e.connect()
+			}
 			klog.Errorf("failed to connect to cloudtunnel, code=%v", resp.StatusCode)
 		}
 		return err
@@ -139,6 +151,16 @@ func (e *edgeTunnel) Stop() error {
 func (e *edgeTunnel) reconnect() {
 	for {
 		if err := e.connect(); err != nil {
+			// if it has be redirected, try the origin parent first
+			if e.originCloudAddr != "" {
+				// wait for leader elect
+				time.Sleep(1 * time.Second)
+
+				klog.Infof("reconnect to origin parent %s", e.originCloudAddr)
+				e.cloudAddr = e.originCloudAddr
+				e.originCloudAddr = ""
+				continue
+			}
 			// if disconnect to parent, choose a parent neighbor to connect.
 			if !e.chooseParentNeighbor() {
 				// wait and connect to current parent.

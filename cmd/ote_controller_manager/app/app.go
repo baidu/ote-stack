@@ -26,8 +26,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -38,6 +36,7 @@ import (
 	"github.com/baidu/ote-stack/pkg/controller/clustercrd"
 	"github.com/baidu/ote-stack/pkg/controller/namespace"
 	"github.com/baidu/ote-stack/pkg/controllermanager"
+	"github.com/baidu/ote-stack/pkg/eventrecorder"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 	oteinformer "github.com/baidu/ote-stack/pkg/generated/informers/externalversions"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
@@ -145,7 +144,7 @@ func Run() error {
 		resourcelock.ResourceLockConfig{
 			Identity: id,
 			// add local event recorder for debug
-			EventRecorder: &localEventRecoder{},
+			EventRecorder: &eventrecorder.LocalEventRecorder{},
 		})
 	if err != nil {
 		return fmt.Errorf("error creating lock: %v", err)
@@ -201,22 +200,4 @@ func startControllers(ctx *controllermanager.ControllerContext) error {
 	ctx.OteInformerFactory.Start(ctx.StopChan)
 	ctx.InformerFactory.Start(ctx.StopChan)
 	return nil
-}
-
-// localEventRecoder is a recorder for leaderelection which print event log to local logs.
-// localEventRecoder implements recode.EventRecorder interface.
-// only Eventf func is needed.
-type localEventRecoder struct{}
-
-func (ler *localEventRecoder) Eventf(obj runtime.Object, eventType, reason, message string, args ...interface{}) {
-	klog.Infof("local event record[%v][%s][%s][%s]%v",
-		obj, eventType, reason, message, args)
-}
-
-func (ler *localEventRecoder) Event(object runtime.Object, eventtype, reason, message string) {}
-
-func (ler *localEventRecoder) PastEventf(object runtime.Object, timestamp metav1.Time, eventtype, reason, messageFmt string, args ...interface{}) {
-}
-
-func (ler *localEventRecoder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 }

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
@@ -104,4 +105,36 @@ func TestListenedCloudTunnel(t *testing.T) {
 	// send to controller manager
 	//err = ct.SendToControllerManager([]byte{})
 	//assert.Nil(t, err)
+}
+
+func TestAccessHandler(t *testing.T) {
+	// redirect to leader
+	redirectAddr := "redirect"
+	ct := cloudTunnel{
+		redirect: func() string {
+			return redirectAddr
+		},
+	}
+	w := &httptest.ResponseRecorder{}
+	ct.accessHandler(w, httptest.NewRequest(http.MethodGet, "http://origin", nil))
+	assert.Equal(t, http.StatusFound, w.Code)
+	l, ok := w.Header()["Location"]
+	assert.True(t, ok)
+	assert.Equal(t, "http://"+redirectAddr, l[0])
+}
+
+func TestControllerHandler(t *testing.T) {
+	// redirect to leader
+	redirectAddr := "redirect"
+	ct := cloudTunnel{
+		redirect: func() string {
+			return redirectAddr
+		},
+	}
+	w := &httptest.ResponseRecorder{}
+	ct.controllerHandler(w, httptest.NewRequest(http.MethodGet, "http://origin", nil))
+	assert.Equal(t, http.StatusFound, w.Code)
+	l, ok := w.Header()["Location"]
+	assert.True(t, ok)
+	assert.Equal(t, "http://"+redirectAddr, l[0])
 }

@@ -43,6 +43,10 @@ type WSClient struct {
 	mutex sync.Mutex
 }
 
+// RedirectFunc is a function called before ClusterNameChecker,
+// which returns a redirect server address.
+type RedirectFunc func() string
+
 // ClusterNameChecker is a function to check cluster name.
 type ClusterNameChecker func(*config.ClusterRegistry) bool
 

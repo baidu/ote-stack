@@ -18,19 +18,34 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"flag"
+	"fmt"
+	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/clusterhandler"
 	"github.com/baidu/ote-stack/pkg/clustermessage"
 	"github.com/baidu/ote-stack/pkg/config"
 	"github.com/baidu/ote-stack/pkg/edgehandler"
-	"github.com/baidu/ote-stack/pkg/k8sclient"
-
+	"github.com/baidu/ote-stack/pkg/eventrecorder"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
+	"github.com/baidu/ote-stack/pkg/k8sclient"
+)
+
+const (
+	leaseDuration = 15 * time.Second
+	renewDeadline = 10 * time.Second
+	retryPeriod   = 2 * time.Second
+
+	oteRootClusterControllerName = "ote-root-cluster-controller"
 )
 
 var (
@@ -40,6 +55,7 @@ var (
 	tunnelListenAddr string
 	remoteShimAddr   string
 	helmTillerAddr   string
+	leaderElection   bool
 )
 
 // NewClusterControllerCommand creates a *cobra.Command object with default parameters.
@@ -73,6 +89,7 @@ func NewClusterControllerCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&tunnelListenAddr, "tunnel-listen", "l", ":8287", "Cloud tunnel listen address, e.g., 192.168.0.3:8287")
 	cmd.PersistentFlags().StringVarP(&remoteShimAddr, "remote-shim-endpoint", "r", "", "remote cluster shim address, e.g., 192.168.0.4:8262")
 	cmd.PersistentFlags().StringVarP(&helmTillerAddr, "helm-tiller-addr", "t", "", "helm tiller http proxy addr, e.g., 192.168.0.4:8288")
+	cmd.PersistentFlags().BoolVarP(&leaderElection, "leader-election", "e", false, "leader elect if this is the root")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)
 
@@ -82,10 +99,11 @@ func NewClusterControllerCommand() *cobra.Command {
 // Run runs cluster controller.
 func Run() error {
 	// make client to k8s apiserver if no remote shim available.
-	var k8sClient oteclient.Interface
+	var oteK8sClient oteclient.Interface
 	var err error
 	if remoteShimAddr == "" {
-		k8sClient, err = k8sclient.NewClient(kubeConfig)
+		klog.Infof("init k8s client")
+		oteK8sClient, err = k8sclient.NewClient(kubeConfig)
 		if err != nil {
 			return err
 		}
@@ -98,10 +116,11 @@ func Run() error {
 	// make config for cluster controller.
 	clusterConfig := &config.ClusterControllerConfig{
 		TunnelListenAddr:      tunnelListenAddr,
+		LeaderListenAddr:      "",
 		ParentCluster:         parentCluster,
 		ClusterName:           clusterName,
 		ClusterUserDefineName: clusterName,
-		K8sClient:             k8sClient,
+		K8sClient:             oteK8sClient,
 		HelmTillerAddr:        helmTillerAddr,
 		RemoteShimAddr:        remoteShimAddr,
 		EdgeToClusterChan:     edgeToClusterChan,
@@ -114,6 +133,7 @@ func Run() error {
 	if err := edgeHandler.Start(); err != nil {
 		klog.Fatal(err)
 	}
+
 	// listen on tunnel for child.
 	clusterHandler, err := clusterhandler.NewClusterHandler(clusterConfig)
 	if err != nil {
@@ -123,9 +143,69 @@ func Run() error {
 		klog.Fatal(err)
 	}
 
+	if leaderElection && config.IsRoot(clusterName) {
+		k8sClient, err := k8sclient.NewK8sClient(kubeConfig)
+		if err != nil {
+			return err
+		}
+		// leader elect if this is the root
+		id, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+
+		// add a uniquifier so that two processes on the same host don't accidentally both become active
+		leaderAddrSep := byte('_')
+		id = id + string(leaderAddrSep) + tunnelListenAddr
+		rl, err := resourcelock.New(
+			resourcelock.EndpointsResourceLock,
+			"kube-system",
+			oteRootClusterControllerName,
+			k8sClient.CoreV1(),
+			resourcelock.ResourceLockConfig{
+				Identity: id,
+				// add event recorder for debug
+				EventRecorder: &eventrecorder.LocalEventRecorder{},
+			})
+		if err != nil {
+			return fmt.Errorf("error creating lock: %v", err)
+		}
+
+		leaderelection.RunOrDie(context.TODO(), leaderelection.LeaderElectionConfig{
+			Lock:          rl,
+			LeaseDuration: leaseDuration,
+			RenewDeadline: renewDeadline,
+			RetryPeriod:   retryPeriod,
+			Callbacks: leaderelection.LeaderCallbacks{
+				OnStartedLeading: func(c context.Context) {
+					setLeaderListenAddr(clusterConfig, "", tunnelListenAddr)
+				},
+				OnStoppedLeading: func() {
+					klog.Fatalf("leaderelection lost")
+				},
+				OnNewLeader: func(identify string) {
+					// get listen addr of leader
+					leaderAddr := identify[strings.LastIndexByte(identify, leaderAddrSep)+1:]
+					klog.Infof("leader listen on %s", leaderAddr)
+					setLeaderListenAddr(clusterConfig, leaderAddr, tunnelListenAddr)
+				},
+			},
+			// TODO add watch dog
+			// participate leader-election if it is connected to cluster controller
+			Name: oteRootClusterControllerName,
+		})
+	}
+
 	// hang.
 	wait := sync.WaitGroup{}
 	wait.Add(1)
 	wait.Wait()
 	return nil
+}
+
+func setLeaderListenAddr(c *config.ClusterControllerConfig, leaderAddr, currentAddr string) {
+	if leaderAddr == currentAddr {
+		return
+	}
+	c.LeaderListenAddr = leaderAddr
 }
