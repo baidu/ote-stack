@@ -1,0 +1,21 @@
+#!/bin/sh
+# usage: otectl cluster_name kubectl_args...
+
+# check if kubectl exists
+find_kubectl=$(type kubectl)
+if [ $? -ne 0 ];then
+    echo "add kubectl to PATH"
+    exit 1
+fi
+
+cmd="kubectl -l ote-cluster="
+for arg in "$@"
+do
+    cmd="${cmd}${arg} "
+done
+
+eval $cmd
+if [ $? -ne 0 ];then
+    echo "otectl cluster_name kubectl_args..."
+    exit 1
+fi
