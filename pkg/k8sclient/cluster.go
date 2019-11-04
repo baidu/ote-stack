@@ -17,9 +17,12 @@ limitations under the License.
 package k8sclient
 
 import (
+	"encoding/json"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
@@ -81,13 +84,59 @@ func (c *ClusterCRD) UpdateStatus(newcluster *otev1.Cluster) error {
 				newcluster.Namespace, newcluster.Name, err)
 		}
 
-		if newcluster.Status.Timestamp <= oldcluster.Status.Timestamp {
-			return fmt.Errorf("timestamp(%d) is too old while current timestamp is %d",
-				newcluster.Status.Timestamp, oldcluster.Status.Timestamp)
+		if !updateClusterIsValid(newcluster, oldcluster) {
+			return fmt.Errorf("check newcluster %s failed", newcluster.Name)
 		}
 
 		oldcluster.Status = newcluster.Status
 		_, err = c.client.OteV1().Clusters(oldcluster.Namespace).Update(oldcluster)
 		return err
 	})
+}
+
+// PatchStatus patches status of an existing cluster.
+func (c *ClusterCRD) PatchStatus(newcluster *otev1.Cluster) error {
+
+	oldcluster, err := c.client.OteV1().Clusters(newcluster.Namespace).Get(newcluster.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get original cluster(%s-%s) failed: %v",
+			newcluster.Namespace, newcluster.Name, err)
+	}
+
+	if !updateClusterIsValid(newcluster, oldcluster) {
+		return fmt.Errorf("check newcluster %s failed", newcluster.Name)
+	}
+
+	update := oldcluster.DeepCopy()
+	update.Status = newcluster.Status
+	patchBytes, err := getPatchBytes(oldcluster, update)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.OteV1().Clusters(oldcluster.Namespace).Patch(oldcluster.Name, types.StrategicMergePatchType, patchBytes, "status")
+	return err
+}
+
+func getPatchBytes(oldcluster, newcluster *otev1.Cluster) ([]byte, error) {
+	oldData, err := json.Marshal(oldcluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Marshal oldData for cluster %s: %v", oldcluster.Name, err)
+	}
+
+	newData, err := json.Marshal(newcluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to Marshal newData for cluster %s: %v", newcluster.Name, err)
+	}
+
+	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, otev1.Cluster{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to CreateTwoWayMergePatch for cluster %s: %v", oldcluster.Name, err)
+	}
+	return patchBytes, nil
+}
+
+func updateClusterIsValid(newcluster, oldcluster *otev1.Cluster) bool {
+	return newcluster.Status.Timestamp > oldcluster.Status.Timestamp
 }

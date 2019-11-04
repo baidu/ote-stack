@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
@@ -85,8 +87,14 @@ func TestClusterCRD(t *testing.T) {
 	set := &otev1.Cluster{
 		ObjectMeta: cluster2.ObjectMeta,
 		Status: otev1.ClusterStatus{
-			Timestamp: 11111111,
-			Status:    otev1.ClusterStatusOffline,
+			Timestamp:  11111111,
+			Status:     otev1.ClusterStatusOffline,
+			ParentName: "c1",
+			ClusterResource: otev1.ClusterResource{
+				Capacity: map[corev1.ResourceName]*resource.Quantity{
+					corev1.ResourceCPU: resource.NewQuantity(32, resource.DecimalSI),
+				},
+			},
 		},
 	}
 
@@ -95,6 +103,22 @@ func TestClusterCRD(t *testing.T) {
 	o = clusterCRD.Get(set.Namespace, set.Name)
 	assert.NotNil(t, o)
 	assert.Equal(t, set.Status, o.Status)
+
+	patchset := &otev1.Cluster{
+		ObjectMeta: set.ObjectMeta,
+		Status: otev1.ClusterStatus{
+			Timestamp: 11111112,
+			Status:    otev1.ClusterStatusOnline,
+		},
+	}
+
+	err = clusterCRD.PatchStatus(patchset)
+	assert.Nil(t, err)
+	o = clusterCRD.Get(patchset.Namespace, patchset.Name)
+	assert.NotNil(t, o)
+	assert.Equal(t, set.Status.ParentName, o.Status.ParentName)
+	assert.Equal(t, set.Status.Capacity[corev1.ResourceCPU], o.Status.Capacity[corev1.ResourceCPU])
+	assert.Equal(t, patchset.Status.Timestamp, o.Status.Timestamp)
 }
 
 func TestClusterControllerCRD(t *testing.T) {

@@ -51,5 +51,5 @@ func (u *UpstreamProcessor) UpdateClusterStatus(clustername string, status *otev
 		Status: *status,
 	}
 
-	return u.clusterCRD.UpdateStatus(cluster)
+	return u.clusterCRD.PatchStatus(cluster)
 }
