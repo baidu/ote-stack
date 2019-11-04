@@ -295,7 +295,7 @@ func TestHandleRegistClusterMessage(t *testing.T) {
 	err = c.handleRegistClusterMessage("c1", msg)
 	assert.NotNil(err)
 	// add a renamed cluster from the same port with large timestamp
-	cr.Time += 1
+	cr.Time++
 	ccbytes, err = json.Marshal(cr)
 	assert.Nil(err)
 	msg.Body = ccbytes
@@ -395,6 +395,8 @@ func (f *fakeCloudTunnel) Broadcast(msg []byte) {
 func (f *fakeCloudTunnel) SendToControllerManager(msg []byte) error {
 	return nil
 }
+
+func (f *fakeCloudTunnel) RegistRedirectFunc(fn tunnel.RedirectFunc) {}
 
 func (f *fakeCloudTunnel) RegistCheckNameValidFunc(fn tunnel.ClusterNameChecker) {}
 

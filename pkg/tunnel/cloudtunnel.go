@@ -60,6 +60,8 @@ type CloudTunnel interface {
 	Broadcast(msg []byte)
 	// SendToControllerManager sends msg to anyone of controller manager.
 	SendToControllerManager([]byte) error
+	// RegistRedirectFunc registers a func which calls before CheckNameValidFunc.
+	RegistRedirectFunc(fn RedirectFunc)
 	// RegistCheckNameValidFunc registers ClusterNameChecker.
 	RegistCheckNameValidFunc(fn ClusterNameChecker)
 	// RegistAfterConnectHook registers AfterConnectHook.
@@ -76,6 +78,7 @@ type CloudTunnel interface {
 type cloudTunnel struct {
 	clients               sync.Map
 	address               string
+	redirect              RedirectFunc
 	clusterNameCheck      ClusterNameChecker
 	receiveMessageHandler TunnelReadMessageFunc
 	notifyClientClosed    ClientCloseHandleFunc
@@ -90,6 +93,7 @@ type cloudTunnel struct {
 func NewCloudTunnel(address string) CloudTunnel {
 	tunnel := &cloudTunnel{
 		address:            address,
+		redirect:           func() string { return "" },
 		clusterNameCheck:   defaultClusterNameChecker,
 		notifyClientClosed: func(*config.ClusterRegistry) { return },
 		afterConnectHook:   defaultAfterConnectHook,
@@ -130,6 +134,10 @@ func (t *cloudTunnel) SendToControllerManager(msg []byte) error {
 		return fmt.Errorf("cannot find a controller to send msg to")
 	}
 	return client.WriteMessage(msg)
+}
+
+func (t *cloudTunnel) RegistRedirectFunc(fn RedirectFunc) {
+	t.redirect = fn
 }
 
 func (t *cloudTunnel) RegistCheckNameValidFunc(fn ClusterNameChecker) {
@@ -195,6 +203,15 @@ func (t *cloudTunnel) connect(cr *config.ClusterRegistry, conn *websocket.Conn) 
 
 // handler for child cluster controller
 func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
+	// redirect to another server if it is specified
+	redirectAddr := t.redirect()
+	if redirectAddr != "" {
+		redirectUrl := r.URL
+		redirectUrl.Host = redirectAddr
+		http.Redirect(w, r, redirectUrl.String(), http.StatusFound)
+		return
+	}
+
 	cluster := mux.Vars(r)[accessURIParam]
 
 	// get cluster listen addr from header.
@@ -244,6 +261,15 @@ func (t *cloudTunnel) accessHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *cloudTunnel) controllerHandler(w http.ResponseWriter, r *http.Request) {
+	// redirect to another server if it is specified
+	redirectAddr := t.redirect()
+	if redirectAddr != "" {
+		redirectUrl := r.URL
+		redirectUrl.Host = redirectAddr
+		http.Redirect(w, r, redirectUrl.String(), http.StatusFound)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		klog.Errorf("connect to controller %s failed: %s", r.RemoteAddr, err.Error())

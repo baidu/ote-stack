@@ -82,6 +82,9 @@ func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error
 	if tunn == nil {
 		return nil, fmt.Errorf("tunnel is nil with no error, listen addr is " + c.TunnelListenAddr)
 	}
+	tunn.RegistRedirectFunc(func() string {
+		return c.LeaderListenAddr
+	})
 	tunn.RegistCheckNameValidFunc(ch.checkClusterName)
 	tunn.RegistReturnMessageFunc(ch.handleMessageFromChild)
 	tunn.RegistClientCloseHandler(ch.closeChild)

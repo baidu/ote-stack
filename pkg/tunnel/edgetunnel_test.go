@@ -40,9 +40,26 @@ func newTestEdgeTunnel() *edgeTunnel {
 func TestConnect(t *testing.T) {
 	tun := newTestEdgeTunnel()
 
-	if err := tun.connect(); err != nil {
-		t.Errorf("connect unexpected error %v", err)
+	err := tun.connect()
+	assert.Nil(t, err)
+
+	redirectAddr := "redirect"
+	ctInter := NewCloudTunnel("")
+	ctInter.RegistRedirectFunc(func() string {
+		return redirectAddr
+	})
+	ct := ctInter.(*cloudTunnel)
+	err = ct.Start()
+	assert.Nil(t, err)
+	originAddr := ct.server.Addr
+	e := &edgeTunnel{
+		cloudAddr: originAddr,
+		name:      "c1",
 	}
+	err = e.connect()
+	assert.NotNil(t, err)
+	assert.Equal(t, redirectAddr, e.cloudAddr)
+	assert.Equal(t, originAddr, e.originCloudAddr)
 }
 
 func TestSend(t *testing.T) {
