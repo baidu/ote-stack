@@ -33,6 +33,8 @@ const (
 	UniqueResourceNameSeparator = "-"
 )
 
+var noGracePeriodSeconds int64
+
 // UpstreamProcessor processes msg from root cluster controller.
 type UpstreamProcessor struct {
 	ctx        *K8sContext

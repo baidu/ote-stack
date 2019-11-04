@@ -136,7 +136,7 @@ func TestRetryNodeUpdate(t *testing.T) {
 				}
 			}
 		}
-		return true, nil, nil
+		return true, etcdNode, nil
 	})
 
 	u.ctx.K8sClient = mockClient
