@@ -10,8 +10,15 @@ function build() {
     OUTPUT=$WORKROOT/output
     rm -rf $OUTPUT && mkdir $OUTPUT
 
-    # build clustercontroller and cluster shim
     OUTPUT_BIN=$OUTPUT/bin
+    mkdir -p $OUTPUT_BIN
+
+    # add otectl to output directory
+    cp $WORKROOT/deployments/otectl $OUTPUT_BIN
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+    # build clustercontroller and cluster shim
     go build -o $OUTPUT_BIN/clustercontroller ./cmd/clustercontroller && \
         go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim && \
         go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim && \
