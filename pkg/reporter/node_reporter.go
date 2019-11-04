@@ -90,7 +90,7 @@ func (nr *NodeReporter) handleNode(obj interface{}) {
 		return
 	}
 
-	klog.V(3).Infof("find node : %s,node: %v", key, node)
+	klog.V(3).Infof("find node (namespace/name): %s", key)
 
 	// adds node objects to UpdateMap.
 	nodeMap := &NodeResourceStatus{

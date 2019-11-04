@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/reporter"
@@ -120,22 +121,41 @@ func (u *UpstreamProcessor) CreateNode(node *corev1.Node) error {
 
 // UpdateNode will update the given node.
 func (u *UpstreamProcessor) UpdateNode(node *corev1.Node) error {
-	storedNode, err := u.GetNode(node)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		storedNode, err := u.GetNode(node)
+		if err != nil {
+			return err
+		}
+
+		if !checkEdgeVersion(&node.ObjectMeta, &storedNode.ObjectMeta) {
+			return fmt.Errorf("check node edge version failed")
+		}
+
+		adaptToCentralResource(&node.ObjectMeta, &storedNode.ObjectMeta)
+
+		_, err = u.ctx.K8sClient.CoreV1().Nodes().Update(node)
+		return err
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if !checkEdgeVersion(&node.ObjectMeta, &storedNode.ObjectMeta) {
-		return fmt.Errorf("check node edge version failed")
-	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		storedNode, err := u.GetNode(node)
+		if err != nil {
+			return err
+		}
 
-	node.ResourceVersion = storedNode.ResourceVersion
-	_, err = u.ctx.K8sClient.CoreV1().Nodes().Update(node)
+		if !checkEdgeVersion(&node.ObjectMeta, &storedNode.ObjectMeta) {
+			return fmt.Errorf("check node edge version failed")
+		}
 
-	// In the case of concurrency, try again if a conflict occurs
-	if err != nil && errors.IsConflict(err) {
-		return u.UpdateNode(node)
-	}
+		adaptToCentralResource(&node.ObjectMeta, &storedNode.ObjectMeta)
+
+		_, err = u.ctx.K8sClient.CoreV1().Nodes().UpdateStatus(node)
+		return err
+	})
 
 	if err != nil {
 		return err
@@ -163,5 +183,7 @@ func (u *UpstreamProcessor) CreateOrUpdateNode(node *corev1.Node) error {
 
 // DeleteNode will delete the given node.
 func (u *UpstreamProcessor) DeleteNode(node *corev1.Node) error {
-	return u.ctx.K8sClient.CoreV1().Nodes().Delete(node.Name, &metav1.DeleteOptions{})
+	return u.ctx.K8sClient.CoreV1().Nodes().Delete(node.Name, &metav1.DeleteOptions{
+		GracePeriodSeconds: &noGracePeriodSeconds,
+	})
 }

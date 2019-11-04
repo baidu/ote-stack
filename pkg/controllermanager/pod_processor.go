@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/reporter"
@@ -107,12 +108,11 @@ func (u *UpstreamProcessor) GetPod(pod *corev1.Pod) (*corev1.Pod, error) {
 func (u *UpstreamProcessor) CreatePod(pod *corev1.Pod) error {
 	// ResourceVersion should not be assigned at creation time
 	pod.ResourceVersion = ""
-
 	_, err := u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Create(pod)
+
 	if err != nil {
 		return err
 	}
-
 	klog.V(3).Infof("Report pod create event success: namespace(%s), name(%s)", pod.Namespace, pod.Name)
 
 	return nil
@@ -120,21 +120,42 @@ func (u *UpstreamProcessor) CreatePod(pod *corev1.Pod) error {
 
 // UpdatePod will update the given pod.
 func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
-	storedPod, err := u.GetPod(pod)
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		storedPod, err := u.GetPod(pod)
+		if err != nil {
+			return err
+		}
+
+		if !checkEdgeVersion(&pod.ObjectMeta, &storedPod.ObjectMeta) {
+			return fmt.Errorf("check pod edge version failed")
+		}
+
+		adaptToCentralResource(&pod.ObjectMeta, &storedPod.ObjectMeta)
+
+		_, err = u.ctx.K8sClient.CoreV1().Pods(storedPod.Namespace).Update(pod)
+		return err
+	})
+
 	if err != nil {
 		return err
+
 	}
 
-	if !checkEdgeVersion(&pod.ObjectMeta, &storedPod.ObjectMeta) {
-		return fmt.Errorf("check pod edge version failed")
-	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		storedPod, err := u.GetPod(pod)
+		if err != nil {
+			return err
+		}
 
-	pod.ResourceVersion = storedPod.ResourceVersion
-	_, err = u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Update(pod)
-	// In the case of concurrency, try again if a conflict occurs
-	if err != nil && errors.IsConflict(err) {
-		return u.UpdatePod(pod)
-	}
+		if !checkEdgeVersion(&pod.ObjectMeta, &storedPod.ObjectMeta) {
+			return fmt.Errorf("check pod edge version failed")
+		}
+
+		adaptToCentralResource(&pod.ObjectMeta, &storedPod.ObjectMeta)
+
+		_, err = u.ctx.K8sClient.CoreV1().Pods(storedPod.Namespace).UpdateStatus(pod)
+		return err
+	})
 
 	if err != nil {
 		return err
@@ -147,10 +168,17 @@ func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
 
 // CreateOrUpdatePod will update the given pod or create it if does not exist.
 func (u *UpstreamProcessor) CreateOrUpdatePod(pod *corev1.Pod) error {
+	// The Pod is not "delete state". At this time, the status of the Pod is still running.
+	// The so-called "delete state" is only the deleteTimestamp and deleteGracePeriodSeconds fields are set.
+	// So if the deleteTimestamp field exists, delete it.
+	if pod.DeletionTimestamp != nil {
+		return u.DeletePod(pod)
+	}
+
 	_, err := u.GetPod(pod)
 	// If not found resource, create it.
 	if err != nil && errors.IsNotFound(err) {
-		return u.CreatePod(pod)
+		err = u.CreatePod(pod)
 	}
 
 	if err != nil {
@@ -162,5 +190,7 @@ func (u *UpstreamProcessor) CreateOrUpdatePod(pod *corev1.Pod) error {
 
 // DeletePod will delete the given pod.
 func (u *UpstreamProcessor) DeletePod(pod *corev1.Pod) error {
-	return u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
+	return u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{
+		GracePeriodSeconds: &noGracePeriodSeconds,
+	})
 }

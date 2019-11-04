@@ -179,6 +179,8 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 		return
 	}
 
+	pr.resetPodSpecParameter(&pod.Spec)
+
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
 	key, err := cache.MetaNamespaceKeyFunc(pod)
@@ -189,6 +191,14 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 	klog.V(3).Infof("find pod : %s", key)
 
 	pr.SetUpdateMap(key, pod)
+}
+
+func (pr *PodReporter) resetPodSpecParameter(spec *corev1.PodSpec) {
+	for index := range spec.Containers {
+		spec.Containers[index].VolumeMounts = nil
+	}
+
+	spec.ServiceAccountName = ""
 }
 
 // deletePod is used to handle the removal of the pod.

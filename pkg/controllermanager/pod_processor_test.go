@@ -98,10 +98,13 @@ func TestRetryUpdate(t *testing.T) {
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-name1",
-			Namespace:       "test-namespace1",
-			Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "11"},
-			ResourceVersion: "1",
+			Name:                       "test-name1",
+			Namespace:                  "test-namespace1",
+			Labels:                     map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "11"},
+			ResourceVersion:            "1",
+			DeletionTimestamp:          nil,
+			DeletionGracePeriodSeconds: nil,
+			UID:                        "22",
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -110,10 +113,16 @@ func TestRetryUpdate(t *testing.T) {
 
 	getPod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test-name1",
-			ResourceVersion: "4",
-			Namespace:       "test-namespace1",
-			Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "1"},
+			Name:                       "test-name1",
+			ResourceVersion:            "4",
+			Namespace:                  "test-namespace1",
+			Labels:                     map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "1"},
+			DeletionTimestamp:          nil,
+			DeletionGracePeriodSeconds: nil,
+			UID:                        "22",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
 		},
 	}
 
@@ -124,10 +133,16 @@ func TestRetryUpdate(t *testing.T) {
 
 		etcdPod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            "test-name1",
-				ResourceVersion: "9",
-				Namespace:       "test-namespace1",
-				Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "0"},
+				Name:                       "test-name1",
+				ResourceVersion:            "9",
+				Namespace:                  "test-namespace1",
+				Labels:                     map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "0"},
+				DeletionTimestamp:          nil,
+				DeletionGracePeriodSeconds: nil,
+				UID:                        "22",
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
 			},
 		}
 
@@ -141,11 +156,36 @@ func TestRetryUpdate(t *testing.T) {
 				}
 			}
 		}
-		return true, nil, nil
+		return true, etcdPod, nil
 	})
 
 	u.ctx.K8sClient = mockClient
 	err := u.UpdatePod(pod)
+	assert.Nil(t, err)
+}
+
+func TestCreatePod(t *testing.T) {
+	u := NewUpstreamProcessor(&K8sContext{})
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test-name1",
+			Namespace:       "test-namespace1",
+			Labels:          map[string]string{reporter.ClusterLabel: "cluster1", reporter.EdgeVersionLabel: "11"},
+			ResourceVersion: "1",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+	}
+
+	mockClient := &kubernetes.Clientset{}
+	mockClient.AddReactor("create", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+		return true, pod, nil
+	})
+
+	u.ctx.K8sClient = mockClient
+	err := u.CreatePod(pod)
 	assert.Nil(t, err)
 
 }
@@ -158,6 +198,17 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 			Namespace:       "testNamespace",
 			Labels:          map[string]string{reporter.EdgeVersionLabel: "11"},
 		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Ports: []corev1.ContainerPort{
+						{
+							Name:          "http",
+							ContainerPort: int32(8000)},
+					},
+				},
+			},
+		},
 	}
 	testPod1 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -165,6 +216,17 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 			ResourceVersion: "10",
 			Namespace:       "testNamespace",
 			Labels:          map[string]string{reporter.EdgeVersionLabel: "12"},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Ports: []corev1.ContainerPort{
+						{
+							Name:          "http",
+							ContainerPort: int32(8888)},
+					},
+				},
+			},
 		},
 	}
 
@@ -176,21 +238,10 @@ func TestGetCreateOrUpdatePod(t *testing.T) {
 		errorOnCreation error
 		errorOnUpdate   error
 		errorOnDelete   error
+		errorOnPatch    error
 		expectActions   []kubetesting.Action
 		expectErr       bool
 	}{
-		{
-			name:            "Success to create a new pod.",
-			pod:             testPod,
-			getPodResult:    nil,
-			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
-			errorOnCreation: nil,
-			expectActions: []kubetesting.Action{
-				newPodGetAction(testPod.Namespace, testPod.Name),
-				newPodCreateAction(testPod.Namespace, testPod),
-			},
-			expectErr: false,
-		},
 		{
 			name:            "A error occurs when create a new pod fails.",
 			pod:             testPod,
