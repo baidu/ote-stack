@@ -130,7 +130,6 @@ func TestRetryDeploymentUpdate(t *testing.T) {
 
 func TestGetCreateOrUpdateDeployment(t *testing.T) {
 	deployment1 := NewDeployment("test1", "", "11", "10")
-	deployment2 := NewDeployment("test1", "", "12", "10")
 
 	tests := []struct {
 		name                string
@@ -143,34 +142,13 @@ func TestGetCreateOrUpdateDeployment(t *testing.T) {
 		expectErr           bool
 	}{
 		{
-			name:       "Success to create a new deployment.",
+			name:       "A error occurs when create a deployment.",
 			deployment: deployment1,
 			errorOnGet: kubeerrors.NewNotFound(schema.GroupResource{}, ""),
 			expectActions: []kubetesting.Action{
 				newDeploymentGetAction(deployment1.Name),
 				newDeploymentCreateAction(deployment1),
-			},
-			expectErr: false,
-		},
-		{
-			name:            "A error occurs when create a new deployment fails.",
-			deployment:      deployment1,
-			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
-			errorOnCreation: errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
 				newDeploymentGetAction(deployment1.Name),
-				newDeploymentCreateAction(deployment1),
-			},
-			expectErr: true,
-		},
-		{
-			name:                "A error occurs when create an existent deployment.",
-			deployment:          deployment2,
-			getDeploymentResult: deployment1,
-			errorOnUpdate:       errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
-				newDeploymentGetAction(deployment1.Name),
-				newDeploymentUpdateAction(deployment1),
 			},
 			expectErr: true,
 		},
@@ -188,9 +166,6 @@ func TestGetCreateOrUpdateDeployment(t *testing.T) {
 			})
 			mockClient.AddReactor("create", "deployments", func(action kubetesting.Action) (bool, runtime.Object, error) {
 				return true, nil, test.errorOnCreation
-			})
-			mockClient.AddReactor("update", "deployments", func(action kubetesting.Action) (bool, runtime.Object, error) {
-				return true, nil, test.errorOnUpdate
 			})
 
 			u.ctx.K8sClient = mockClient

@@ -95,7 +95,7 @@ func (u *UpstreamProcessor) CreateOrUpdateDeployment(deployment *appsv1.Deployme
 	_, err := u.GetDeployment(deployment)
 	// If not found resource, creates it.
 	if err != nil && errors.IsNotFound(err) {
-		return u.CreateDeployment(deployment)
+		err = u.CreateDeployment(deployment)
 	}
 
 	if err != nil {
