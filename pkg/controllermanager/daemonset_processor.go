@@ -95,7 +95,7 @@ func (u *UpstreamProcessor) CreateOrUpdateDaemonset(daemonset *appsv1.DaemonSet)
 	_, err := u.GetDaemonset(daemonset)
 	// If not found resource, creates it.
 	if err != nil && errors.IsNotFound(err) {
-		return u.CreateDaemonset(daemonset)
+		err = u.CreateDaemonset(daemonset)
 	}
 
 	if err != nil {

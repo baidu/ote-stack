@@ -130,7 +130,6 @@ func TestRetryDaemonsetUpdate(t *testing.T) {
 
 func TestGetCreateOrUpdateDaemonset(t *testing.T) {
 	daemonset1 := NewDaemonset("test1", "", "11", "10")
-	daemonset2 := NewDaemonset("test1", "", "12", "10")
 
 	tests := []struct {
 		name               string
@@ -143,34 +142,13 @@ func TestGetCreateOrUpdateDaemonset(t *testing.T) {
 		expectErr          bool
 	}{
 		{
-			name:       "Success to create a new daemonset.",
+			name:       "A error occurs when create a daemonset.",
 			daemonset:  daemonset1,
 			errorOnGet: kubeerrors.NewNotFound(schema.GroupResource{}, ""),
 			expectActions: []kubetesting.Action{
 				newDaemonSetGetAction(daemonset1.Name),
 				newDaemonSetCreateAction(daemonset1),
-			},
-			expectErr: false,
-		},
-		{
-			name:            "A error occurs when create a new daemonset fails.",
-			daemonset:       daemonset1,
-			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
-			errorOnCreation: errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
 				newDaemonSetGetAction(daemonset1.Name),
-				newDaemonSetCreateAction(daemonset1),
-			},
-			expectErr: true,
-		},
-		{
-			name:               "A error occurs when create an existent daemonset.",
-			daemonset:          daemonset2,
-			getDaemonSetResult: daemonset1,
-			errorOnUpdate:      errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
-				newDaemonSetGetAction(daemonset1.Name),
-				newDaemonSetUpdateAction(daemonset1),
 			},
 			expectErr: true,
 		},
@@ -188,9 +166,6 @@ func TestGetCreateOrUpdateDaemonset(t *testing.T) {
 			})
 			mockClient.AddReactor("create", "daemonsets", func(action kubetesting.Action) (bool, runtime.Object, error) {
 				return true, nil, test.errorOnCreation
-			})
-			mockClient.AddReactor("update", "daemonsets", func(action kubetesting.Action) (bool, runtime.Object, error) {
-				return true, nil, test.errorOnUpdate
 			})
 
 			u.ctx.K8sClient = mockClient

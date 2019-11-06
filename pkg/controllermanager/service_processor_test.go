@@ -130,7 +130,6 @@ func TestRetryServiceUpdate(t *testing.T) {
 
 func TestGetCreateOrUpdateService(t *testing.T) {
 	service1 := NewService("test1", "", "11", "10")
-	service2 := NewService("test1", "", "12", "10")
 
 	tests := []struct {
 		name             string
@@ -143,34 +142,13 @@ func TestGetCreateOrUpdateService(t *testing.T) {
 		expectErr        bool
 	}{
 		{
-			name:       "Success to create a new service.",
+			name:       "A error occurs when create a service.",
 			service:    service1,
 			errorOnGet: kubeerrors.NewNotFound(schema.GroupResource{}, ""),
 			expectActions: []kubetesting.Action{
 				newServiceGetAction(service1.Name),
 				newServiceCreateAction(service1),
-			},
-			expectErr: false,
-		},
-		{
-			name:            "A error occurs when create a new service fails.",
-			service:         service1,
-			errorOnGet:      kubeerrors.NewNotFound(schema.GroupResource{}, ""),
-			errorOnCreation: errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
 				newServiceGetAction(service1.Name),
-				newServiceCreateAction(service1),
-			},
-			expectErr: true,
-		},
-		{
-			name:             "A error occurs when create an existent service.",
-			service:          service2,
-			getServiceResult: service1,
-			errorOnUpdate:    errors.New("wanted error"),
-			expectActions: []kubetesting.Action{
-				newServiceGetAction(service1.Name),
-				newServiceUpdateAction(service1),
 			},
 			expectErr: true,
 		},

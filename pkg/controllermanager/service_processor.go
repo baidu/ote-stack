@@ -95,7 +95,7 @@ func (u *UpstreamProcessor) CreateOrUpdateService(service *corev1.Service) error
 	_, err := u.GetService(service)
 	// If not found resource, creates it.
 	if err != nil && errors.IsNotFound(err) {
-		return u.CreateService(service)
+		err = u.CreateService(service)
 	}
 
 	if err != nil {
