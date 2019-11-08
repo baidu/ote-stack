@@ -20,9 +20,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	jsonpatch "github.com/evanphx/json-patch"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
@@ -115,7 +115,7 @@ func (c *ClusterCRD) PatchStatus(newcluster *otev1.Cluster) error {
 		return err
 	}
 
-	_, err = c.client.OteV1().Clusters(oldcluster.Namespace).Patch(oldcluster.Name, types.StrategicMergePatchType, patchBytes, "status")
+	_, err = c.client.OteV1().Clusters(oldcluster.Namespace).Patch(oldcluster.Name, types.MergePatchType, patchBytes)
 	return err
 }
 
@@ -130,7 +130,7 @@ func getPatchBytes(oldcluster, newcluster *otev1.Cluster) ([]byte, error) {
 		return nil, fmt.Errorf("failed to Marshal newData for cluster %s: %v", newcluster.Name, err)
 	}
 
-	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, otev1.Cluster{})
+	patchBytes, err := jsonpatch.MergePatch(oldData, newData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to CreateTwoWayMergePatch for cluster %s: %v", oldcluster.Name, err)
 	}
