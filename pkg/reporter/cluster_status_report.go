@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	clusterStatusSyncPeriod = 120 * time.Second
+	clusterStatusSyncPeriod = 60 * time.Second
 )
 
 // ClusterStatusReporter is responsible for synchronizing information about the status of a cluster.

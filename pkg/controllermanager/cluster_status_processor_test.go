@@ -19,12 +19,12 @@ package controllermanager
 import (
 	"testing"
 
-	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/k8sclient"
+	otefake "github.com/baidu/ote-stack/pkg/k8sclient/fake"
 )
 
 func TestHandleClusterStatusReport(t *testing.T) {
@@ -39,7 +39,7 @@ func TestHandleClusterStatusReport(t *testing.T) {
 	}
 
 	processor := &UpstreamProcessor{
-		clusterCRD: k8sclient.NewClusterCRD(oteclient.NewSimpleClientset(cluster1)),
+		clusterCRD: k8sclient.NewClusterCRD(otefake.NewSimpleClientset(cluster1)),
 	}
 
 	testcase := []struct {

@@ -28,6 +28,7 @@ import (
 
 	otev1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
+	otefake "github.com/baidu/ote-stack/pkg/k8sclient/fake"
 )
 
 const (
@@ -67,8 +68,8 @@ func TestClusterCRD(t *testing.T) {
 			Name:      "c2",
 		},
 	}
-	client := oteclient.NewSimpleClientset(cluster1)
 
+	client := otefake.NewSimpleClientset(cluster1)
 	clusterCRD := NewClusterCRD(client)
 	assert.NotNil(t, clusterCRD)
 	o := clusterCRD.Get("default", "c1")
@@ -117,7 +118,7 @@ func TestClusterCRD(t *testing.T) {
 	o = clusterCRD.Get(patchset.Namespace, patchset.Name)
 	assert.NotNil(t, o)
 	assert.Equal(t, set.Status.ParentName, o.Status.ParentName)
-	assert.Equal(t, set.Status.Capacity[corev1.ResourceCPU], o.Status.Capacity[corev1.ResourceCPU])
+	assert.Equal(t, set.Status.Capacity[corev1.ResourceCPU].Value(), o.Status.Capacity[corev1.ResourceCPU].Value())
 	assert.Equal(t, patchset.Status.Timestamp, o.Status.Timestamp)
 }
 
