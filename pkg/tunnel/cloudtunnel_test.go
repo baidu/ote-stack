@@ -138,3 +138,40 @@ func TestControllerHandler(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "http://"+redirectAddr, l[0])
 }
+
+func TestHandleReceieveMsg(t *testing.T) {
+	ctInter := NewCloudTunnel("")
+	ct := ctInter.(*cloudTunnel)
+	err := ct.Start()
+	addr := ct.server.Addr
+	clientName := "c1"
+	u, err := url.Parse(fmt.Sprintf("ws://%s%s%s", addr, accessURI, clientName))
+	header := http.Header{}
+	header.Add(config.ClusterConnectHeaderListenAddr, "fake")
+	header.Add(config.ClusterConnectHeaderUserDefineName, clientName)
+	assert.Nil(t, err)
+	// wait listen
+	time.Sleep(1 * time.Second)
+	assert.Nil(t, err)
+	// connect a client
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), header)
+	assert.NotNil(t, conn)
+	assert.Nil(t, err)
+
+	time.Sleep(time.Second * time.Duration(1))
+
+	client1, ok := ct.clients.Load("c1")
+	assert.True(t, ok)
+	assert.NotNil(t, client1)
+	err = ct.Send(clientName, []byte{})
+	assert.Nil(t, err)
+
+	ws := NewWSClient(clientName, conn)
+
+	go func() {
+		time.Sleep(time.Second * time.Duration(2))
+		ws.Close()
+	}()
+
+	ct.handleReceiveMessage(ws)
+}
