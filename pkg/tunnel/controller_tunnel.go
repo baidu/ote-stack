@@ -247,6 +247,6 @@ func (e *controllerTunnel) handleReceiveMessage() {
 			break
 		}
 
-		e.receiveMessageHandler(e.wsclient.Name, msg)
+		go e.receiveMessageHandler(e.wsclient.Name, msg)
 	}
 }
