@@ -108,6 +108,11 @@ func Run() error {
 	if err != nil {
 		return err
 	}
+	// k8s client for leader election
+	leK8sClient, err := k8sclient.NewK8sClient(kubeConfig)
+	if err != nil {
+		return err
+	}
 
 	// connect to root clustercontroller
 	controllerTunnel := tunnel.NewControllerTunnel(rootClusterControllerAddr)
@@ -140,7 +145,7 @@ func Run() error {
 		resourcelock.EndpointsResourceLock,
 		"kube-system",
 		oteControllerManagerName,
-		k8sClient.CoreV1(),
+		leK8sClient.CoreV1(),
 		resourcelock.ResourceLockConfig{
 			Identity: id,
 			// add local event recorder for debug
