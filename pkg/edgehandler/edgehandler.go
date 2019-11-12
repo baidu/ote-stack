@@ -35,7 +35,7 @@ import (
 )
 
 var (
-	subtreeReportDuration = 1 * time.Minute
+	subtreeReportDuration = 1 * time.Second
 )
 
 // EdgeHandler is edgehandler interface that process messages from tunnel and transmit to shim.

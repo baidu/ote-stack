@@ -646,6 +646,14 @@ func (c *clusterHandler) updateRouteToSubtree(msg *clustermessage.ClusterMessage
 			klog.Errorf("add subtree router %s-%s failed: %v", to, msg.Head.ClusterName, err)
 		}
 	}
+	// delete route from child but not in subtrees
+	childsOfChild := clusterrouter.Router().SubTreeOfPort(msg.Head.ClusterName)
+	for _, c := range childsOfChild {
+		if _, ok := subtrees[c]; !ok {
+			clusterrouter.Router().DelRoute(c, msg.Head.ClusterName)
+		}
+	}
+
 	// do not return part of err in for cycle
 	return nil
 }
