@@ -77,6 +77,9 @@ root
 */
 func TestRoute(t *testing.T) {
 	r := Router()
+	// a empty router should has subtree router msg
+	msg := r.SubTreeMessage()
+	assert.NotNil(t, msg)
 
 	err := r.AddRoute("c1", "c1")
 	assert.Nil(t, err)
@@ -112,6 +115,11 @@ func TestRoute(t *testing.T) {
 	err = r.AddRoute("cm", "c1")
 	assert.Nil(t, err)
 
+	assert.ElementsMatch(t,
+		[]string{"cn", "cm"},
+		r.SubTreeOfPort("c1"),
+	)
+
 	assert.EqualValues(t,
 		map[string][]string{
 			"c1": {"cn"},
@@ -123,7 +131,7 @@ func TestRoute(t *testing.T) {
 		[]string{"c1", "c2", "c3", "cn", "cm"},
 		r.SubTreeClusters())
 
-	msg := r.SubTreeMessage()
+	msg = r.SubTreeMessage()
 	assert.NotNil(t, msg)
 	assert.Equal(t, clustermessage.CommandType_SubTreeRoute, msg.Head.Command)
 	serial, err := r.subtreeRouter.Serialize()

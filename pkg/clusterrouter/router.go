@@ -249,8 +249,13 @@ func (cr *ClusterRouter) PortsToSubtreeClusters(clusters *[]string) map[string][
 
 // SubTreeOfPort return a slice of cluster names which is in the subtree under a certain port.
 func (cr *ClusterRouter) SubTreeOfPort(port string) []string {
-	// TODO
-	return nil
+	ret := make([]string, 0)
+	for to, p := range cr.subtreeRouter {
+		if p == port && to != port {
+			ret = append(ret, to)
+		}
+	}
+	return ret
 }
 
 // SubTreeClusters return all cluster names under current cluster.
@@ -313,10 +318,6 @@ func (cr *ClusterRouter) NeighborRouterMessage() *clustermessage.ClusterMessage 
 
 // SubTreeMessage wrap subtree router info to cluster message.
 func (cr *ClusterRouter) SubTreeMessage() *clustermessage.ClusterMessage {
-	if len(cr.subtreeRouter) == 0 {
-		return nil
-	}
-
 	cr.rwMutex.RLock()
 	defer cr.rwMutex.RUnlock()
 
