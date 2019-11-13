@@ -139,10 +139,8 @@ func Run() error {
 	if err != nil {
 		klog.Fatal(err)
 	}
-	if err := clusterHandler.Start(); err != nil {
-		klog.Fatal(err)
-	}
 
+	// if this cc should participate in leader election, start the cluster handler when become the leader
 	if leaderElection && config.IsRoot(clusterName) {
 		k8sClient, err := k8sclient.NewK8sClient(kubeConfig)
 		if err != nil {
@@ -188,12 +186,19 @@ func Run() error {
 					leaderAddr := identify[strings.LastIndexByte(identify, leaderAddrSep)+1:]
 					klog.Infof("leader listen on %s", leaderAddr)
 					setLeaderListenAddr(clusterConfig, leaderAddr, tunnelListenAddr)
+					if err := clusterHandler.Start(); err != nil {
+						klog.Fatal(err)
+					}
 				},
 			},
 			// TODO add watch dog
 			// participate leader-election if it is connected to cluster controller
 			Name: oteRootClusterControllerName,
 		})
+	} else {
+		if err := clusterHandler.Start(); err != nil {
+			klog.Fatal(err)
+		}
 	}
 
 	// hang.
