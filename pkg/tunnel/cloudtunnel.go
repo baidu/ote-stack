@@ -322,6 +322,7 @@ func (t *cloudTunnel) Stop() error {
 }
 
 func (t *cloudTunnel) Start() error {
+	klog.Infof("start cloud tunnel on %s", t.address)
 	router := mux.NewRouter()
 	uri := fmt.Sprintf(accessURIPattern, accessURIParam)
 	router.HandleFunc(uri, t.accessHandler)
