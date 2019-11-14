@@ -29,6 +29,14 @@ import (
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
 )
 
+// K8sOption uses for creating a k8s client.
+type K8sOption struct {
+	// kubeconfig is k8s's config parameter.
+	kubeConfig string
+	// burst is the number of request sent to kube-apiserver per second.
+	burst int
+}
+
 // NewClient new a k8s client by k8s config file.
 func NewClient(kubeConfig string) (oteclient.Interface, error) {
 	config, err := getRestConfigFromKubeConfigFile(kubeConfig)
@@ -46,17 +54,22 @@ func NewClient(kubeConfig string) (oteclient.Interface, error) {
 	return clientset, nil
 }
 
-func NewK8sClient(kubeConfig string) (kubernetes.Interface, error) {
-	config, err := getRestConfigFromKubeConfigFile(kubeConfig)
+func NewK8sClient(k8sOption K8sOption) (kubernetes.Interface, error) {
+	config, err := getRestConfigFromKubeConfigFile(k8sOption.kubeConfig)
 	if err != nil {
 		return nil, err
+	}
+
+	// if burst is not specified, use the default value.
+	if k8sOption.burst != 0 {
+		config.Burst = k8sOption.burst
 	}
 
 	// creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("build client with config from %s failed: %v",
-			kubeConfig, err)
+			k8sOption.kubeConfig, err)
 	}
 	klog.Infof("connect to k8s apiserver %v success", config.Host)
 	return clientset, nil
@@ -75,4 +88,14 @@ func getRestConfigFromKubeConfigFile(kubeConfig string) (*rest.Config, error) {
 		return nil, fmt.Errorf("get kubernetes config from %s failed: %v", kubeConfig, err)
 	}
 	return config, nil
+}
+
+// NewK8sOption uses config and burst to construct a k8s option for k8s client.
+func NewK8sOption(config string, burst int) K8sOption {
+	option := K8sOption{
+		kubeConfig: config,
+		burst:      burst,
+	}
+
+	return option
 }

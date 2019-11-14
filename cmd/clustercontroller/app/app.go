@@ -142,7 +142,7 @@ func Run() error {
 
 	// if this cc should participate in leader election, start the cluster handler when become the leader
 	if leaderElection && config.IsRoot(clusterName) {
-		k8sClient, err := k8sclient.NewK8sClient(kubeConfig)
+		k8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, 0))
 		if err != nil {
 			return err
 		}
