@@ -54,6 +54,7 @@ const (
 
 var (
 	kubeConfig                string
+	kubeBurst                 int
 	rootClusterControllerAddr string
 	Controllers               = map[string]controllermanager.InitFunc{
 		"clustercrd": clustercrd.InitClusterCrdController,
@@ -91,6 +92,8 @@ func NewOTEControllerManagerCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVarP(&rootClusterControllerAddr, "root-cluster-controller", "r",
 		":8272",
 		"root clustercontroller address, could be a front load balancer, e.g., 192.168.0.4:8272")
+	cmd.PersistentFlags().IntVarP(&kubeBurst, "kube-api-burst", "b", 0,
+		"Burst to use while talking with kubernetes apiserver")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)
 
@@ -104,12 +107,14 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	k8sClient, err := k8sclient.NewK8sClient(kubeConfig)
+
+	k8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, kubeBurst))
 	if err != nil {
 		return err
 	}
+
 	// k8s client for leader election
-	leK8sClient, err := k8sclient.NewK8sClient(kubeConfig)
+	leK8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, 0))
 	if err != nil {
 		return err
 	}

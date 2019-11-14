@@ -59,7 +59,7 @@ type ShimHandler map[string]handler.Handler
 
 // NewlocalShimClient returns a local shim client with default handler.
 func NewlocalShimClient(c *config.ClusterControllerConfig) ShimServiceClient {
-	k8sClient, err := k8sclient.NewK8sClient(c.KubeConfig)
+	k8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(c.KubeConfig, 0))
 	if err != nil {
 		klog.Errorf("failed to create k8s client: %v", err)
 		return nil
