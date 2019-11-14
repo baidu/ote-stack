@@ -144,7 +144,8 @@ func NewReporterInitializers() map[string]InitFunc {
 	reporters["deployment"] = startDeploymentReporter
 	reporters["daemonset"] = startDaemonsetReporter
 	reporters["service"] = startServiceReporter
-	reporters["event"] = startEventReporter
+	// Immediate reporting will cause timeliness problems and need to be transformed into regular reporting
+	//reporters["event"] = startEventReporter
 
 	return reporters
 }
