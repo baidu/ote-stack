@@ -73,7 +73,7 @@ func NewK3sClusterShimCommand() *cobra.Command {
 // Run runs the k3s cluster shim.
 func Run() error {
 	// make client to k3s apiserver.
-	k3sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, 0))
+	k3sClient, err := k8sclient.NewK8sClient(k8sclient.K8sOption{KubeConfig: kubeConfig})
 	if err != nil {
 		return err
 	}

@@ -148,7 +148,7 @@ func TestK8sClient(t *testing.T) {
 	i, err := NewClient(kubeConfig)
 	assert.NotNil(t, err)
 	assert.Nil(t, i)
-	k, err := NewK8sClient(NewK8sOption(kubeConfig, 0))
+	k, err := NewK8sClient(K8sOption{KubeConfig: kubeConfig})
 	assert.NotNil(t, err)
 	assert.Nil(t, k)
 
@@ -158,7 +158,7 @@ func TestK8sClient(t *testing.T) {
 	i, err = NewClient(kubeConfig)
 	assert.Nil(t, err)
 	assert.NotNil(t, i)
-	k, err = NewK8sClient(NewK8sOption(kubeConfig, 0))
+	k, err = NewK8sClient(K8sOption{KubeConfig: kubeConfig})
 	assert.Nil(t, err)
 	assert.NotNil(t, k)
 	// remove exist file
