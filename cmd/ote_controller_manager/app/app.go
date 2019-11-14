@@ -55,6 +55,7 @@ const (
 var (
 	kubeConfig                string
 	kubeBurst                 int
+	kubeQps                   float32
 	rootClusterControllerAddr string
 	Controllers               = map[string]controllermanager.InitFunc{
 		"clustercrd": clustercrd.InitClusterCrdController,
@@ -94,6 +95,8 @@ func NewOTEControllerManagerCommand() *cobra.Command {
 		"root clustercontroller address, could be a front load balancer, e.g., 192.168.0.4:8272")
 	cmd.PersistentFlags().IntVarP(&kubeBurst, "kube-api-burst", "b", 0,
 		"Burst to use while talking with kubernetes apiserver")
+	cmd.PersistentFlags().Float32VarP(&kubeQps, "kube-api-qps", "q", 0.0,
+		"qps to use while talking with kubernetes apiserver")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)
 
@@ -108,13 +111,19 @@ func Run() error {
 		return err
 	}
 
-	k8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, kubeBurst))
+	k8sOption := k8sclient.K8sOption{
+		KubeConfig: kubeConfig,
+		Burst:      kubeBurst,
+		Qps:        kubeQps,
+	}
+
+	k8sClient, err := k8sclient.NewK8sClient(k8sOption)
 	if err != nil {
 		return err
 	}
 
 	// k8s client for leader election
-	leK8sClient, err := k8sclient.NewK8sClient(k8sclient.NewK8sOption(kubeConfig, 0))
+	leK8sClient, err := k8sclient.NewK8sClient(k8sclient.K8sOption{KubeConfig: kubeConfig})
 	if err != nil {
 		return err
 	}
