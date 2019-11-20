@@ -390,7 +390,9 @@ func (c *clusterHandler) handleMessageFromChild(client string, data []byte) (ret
 			ret = c.sendToControllerManager(msg)
 			// TODO return error if failed
 			// TODO do not merge to apiserver
-			ret = c.mergeToApiserver(msg)
+			if msg.Head.Command == clustermessage.CommandType_ControlResp {
+				ret = c.mergeToApiserver(msg)
+			}
 		} else {
 			c.transmitToParent(msg)
 		}
