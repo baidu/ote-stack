@@ -42,6 +42,7 @@ const (
 
 	ClusterLabel     = "ote-cluster"
 	EdgeVersionLabel = "edge-version"
+	EdgeNodeName     = "node-name"
 )
 
 // Report defines edge report content.

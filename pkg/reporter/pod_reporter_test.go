@@ -157,3 +157,36 @@ func newPod() *corev1.Pod {
 		},
 	}
 }
+
+func TestResetPodSpecParameter(t *testing.T) {
+	f := newFixture(t)
+	podReporter := f.newPodReporter()
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{ClusterLabel: clusterName},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node1",
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name: "name1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	podReporter.resetPodSpecParameter(pod)
+
+	assert.Nil(t, pod.Spec.Containers[0].VolumeMounts)
+	assert.Empty(t, pod.Spec.NodeName)
+}
