@@ -179,7 +179,7 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 		return
 	}
 
-	pr.resetPodSpecParameter(&pod.Spec)
+	pr.resetPodSpecParameter(pod)
 
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
@@ -193,12 +193,19 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 	pr.SetUpdateMap(key, pod)
 }
 
-func (pr *PodReporter) resetPodSpecParameter(spec *corev1.PodSpec) {
-	for index := range spec.Containers {
-		spec.Containers[index].VolumeMounts = nil
+func (pr *PodReporter) resetPodSpecParameter(pod *corev1.Pod) {
+	for index := range pod.Spec.Containers {
+		pod.Spec.Containers[index].VolumeMounts = nil
 	}
 
-	spec.ServiceAccountName = ""
+	pod.Spec.ServiceAccountName = ""
+
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+
+	pod.Labels[EdgeNodeName] = pod.Spec.NodeName
+	pod.Spec.NodeName = ""
 }
 
 // deletePod is used to handle the removal of the pod.
