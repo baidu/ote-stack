@@ -132,6 +132,8 @@ func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
 
 		adaptToCentralResource(&pod.ObjectMeta, &storedPod.ObjectMeta)
 
+		pod.Spec.NodeName = storedPod.Spec.NodeName
+
 		_, err = u.ctx.K8sClient.CoreV1().Pods(storedPod.Namespace).Update(pod)
 		return err
 	})
