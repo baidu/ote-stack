@@ -205,7 +205,6 @@ func (pr *PodReporter) resetPodSpecParameter(pod *corev1.Pod) {
 	}
 
 	pod.Labels[EdgeNodeName] = pod.Spec.NodeName
-	pod.Spec.NodeName = ""
 }
 
 // deletePod is used to handle the removal of the pod.
