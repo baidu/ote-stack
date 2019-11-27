@@ -108,6 +108,9 @@ func (u *UpstreamProcessor) GetPod(pod *corev1.Pod) (*corev1.Pod, error) {
 func (u *UpstreamProcessor) CreatePod(pod *corev1.Pod) error {
 	// ResourceVersion should not be assigned at creation time
 	pod.ResourceVersion = ""
+	// service account must be empty for create
+	pod.Spec.ServiceAccountName = ""
+
 	_, err := u.ctx.K8sClient.CoreV1().Pods(pod.Namespace).Create(pod)
 
 	if err != nil {
@@ -120,6 +123,8 @@ func (u *UpstreamProcessor) CreatePod(pod *corev1.Pod) error {
 
 // UpdatePod will update the given pod.
 func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
+	// deep copy for spec field set
+	copyPod := pod.DeepCopy()
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		storedPod, err := u.GetPod(pod)
 		if err != nil {
@@ -132,7 +137,13 @@ func (u *UpstreamProcessor) UpdatePod(pod *corev1.Pod) error {
 
 		adaptToCentralResource(&pod.ObjectMeta, &storedPod.ObjectMeta)
 
-		pod.Spec.NodeName = storedPod.Spec.NodeName
+		// set pod spec field
+		pod.Spec = storedPod.Spec
+		// only the following fields can be modified
+		pod.Spec.ActiveDeadlineSeconds = copyPod.Spec.ActiveDeadlineSeconds
+		pod.Spec.Tolerations = copyPod.Spec.Tolerations
+		// TODO spec.containers[*].image and spec.initContainers[*].image setting is not clear,
+		// and no need to sync those fields currently
 
 		_, err = u.ctx.K8sClient.CoreV1().Pods(storedPod.Namespace).Update(pod)
 		return err

@@ -194,12 +194,6 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 }
 
 func (pr *PodReporter) resetPodSpecParameter(pod *corev1.Pod) {
-	for index := range pod.Spec.Containers {
-		pod.Spec.Containers[index].VolumeMounts = nil
-	}
-
-	pod.Spec.ServiceAccountName = ""
-
 	if pod.Labels == nil {
 		pod.Labels = make(map[string]string)
 	}

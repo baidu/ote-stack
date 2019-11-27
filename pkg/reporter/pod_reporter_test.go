@@ -187,5 +187,6 @@ func TestResetPodSpecParameter(t *testing.T) {
 
 	podReporter.resetPodSpecParameter(pod)
 
-	assert.Nil(t, pod.Spec.Containers[0].VolumeMounts)
+	assert.NotNil(t, pod.Labels)
+	assert.NotNil(t, pod.Labels[EdgeNodeName])
 }
