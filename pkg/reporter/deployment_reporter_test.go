@@ -47,7 +47,7 @@ func (f *fixture) newReportContext() *ReporterContext {
 			return clusterName
 		},
 		SyncChan: make(chan clustermessage.ClusterMessage, 1),
-		StopChan: make(<-chan struct{}),
+		StopChan: make(chan struct{}),
 	}
 
 	return ctx

@@ -38,6 +38,7 @@ const (
 	clusterNameParam                   = "cc_name"
 	shimServerPathForClusterController = "clustercontroller"
 	sendChanBuffer                     = 128
+	signalBuffer                       = 1
 )
 
 var (
@@ -52,6 +53,7 @@ type ShimServer struct {
 	clientMutex *sync.RWMutex
 	clusterName string
 	sendChan    chan clustermessage.ClusterMessage
+	isConnected chan bool
 }
 
 // NewShimServer creates a new shimServer.
@@ -60,6 +62,7 @@ func NewShimServer() *ShimServer {
 		handlers:    make(map[string]handler.Handler),
 		clientMutex: &sync.RWMutex{},
 		sendChan:    make(chan clustermessage.ClusterMessage, sendChanBuffer),
+		isConnected: make(chan bool, signalBuffer),
 	}
 }
 
@@ -153,10 +156,12 @@ func (s *ShimServer) do(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *ShimServer) connected() {
+	s.isConnected <- true
 	klog.Infof("cluster controller connected")
 	// readMessage is a block function
 	s.readMessage()
 
+	s.isConnected <- false
 	klog.Infof("cluster controller %s is disconnected", s.clusterName)
 	// clear client to wait for next
 	s.clientMutex.Lock()
@@ -251,8 +256,12 @@ func (s *ShimServer) SendChan() chan clustermessage.ClusterMessage {
 	return s.sendChan
 }
 
-func (s *ShimServer) writeMessage(stop chan struct{}) {
+// ConnectStatusChan returns the channel that indicates if cc is connected to shim.
+func (s *ShimServer) ConnectStatusChan() chan bool {
+	return s.isConnected
+}
 
+func (s *ShimServer) writeMessage(stop chan struct{}) {
 	klog.Infof("start to watch sendchan and write message")
 	for {
 		select {

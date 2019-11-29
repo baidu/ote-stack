@@ -37,7 +37,7 @@ func TestIsValid(t *testing.T) {
 			return "name1"
 		},
 		SyncChan: make(chan clustermessage.ClusterMessage),
-		StopChan: make(<-chan struct{}),
+		StopChan: make(chan struct{}),
 	}
 
 	//ctx.InformerFactory is empty

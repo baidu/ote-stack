@@ -56,7 +56,7 @@ func (f *fixtureNode) newNodeReporter() *NodeReporter {
 			return clusterName
 		},
 		SyncChan: make(chan clustermessage.ClusterMessage),
-		StopChan: make(<-chan struct{}),
+		StopChan: make(chan struct{}),
 	}
 
 	nodeReporter, err := newNodeReporter(ctx)

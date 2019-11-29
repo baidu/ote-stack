@@ -64,7 +64,7 @@ func (f *fixture) newPodReporter() *PodReporter {
 			return clusterName
 		},
 		SyncChan: make(chan clustermessage.ClusterMessage),
-		StopChan: make(<-chan struct{}),
+		StopChan: make(chan struct{}),
 	}
 
 	podReporter, err := newPodReporter(ctx)

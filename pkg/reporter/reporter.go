@@ -126,7 +126,7 @@ type ReporterContext struct {
 	// SyncChan is used for synchronizing status of the edge cluster.
 	SyncChan chan clustermessage.ClusterMessage
 	// StopChan is the stop channel.
-	StopChan <-chan struct{}
+	StopChan chan struct{}
 	// KubeClient is the kubernetes client interface for the reporter to use.
 	KubeClient kubernetes.Interface
 }
