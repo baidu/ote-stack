@@ -14,7 +14,7 @@ OTE-Stack is an edge computing platform for 5G and AI. By virtualization it can 
 Through the standard interface, hierarchical clusters can be built quickly. The number of clusters can be theoretically unlimited which can effectively solve the management and scheduling problems of large-scale mobile edge clusters in 5G era.
 
 ### Support third cluster
-It supports [kubernetes](https://github.com/kubernetes/) and [k3s](https://github.com/rancher/k3s) now. Because edge is a logical cluster，it can support any clusters by cluster-shim in theory. So in 5G era, it can be compatible with different implementations of different operators'MEC platforms.
+It supports [kubernetes](https://github.com/kubernetes/) and [k3s](https://github.com/rancher/k3s) now. Because edge is a logical cluster, it can support any clusters by cluster-shim in theory. So in 5G era, it can be compatible with different implementations of different operators'MEC platforms.
 
 ### Lightweight cluster controller 
 Only one component and one customize shim can make the third cluster controlled by OTE-Stack. So it's very light and easy to use.
@@ -29,7 +29,7 @@ Because of the hierarchical design of clusters, Cluster Controller at each level
 Through Cluster Controller, all the clusters can be integrated into the unified scheduling, and the global optimal use of edge resources can be achieved.
 
 ### Support multi-runtimes
-OTE-Stack leverages [virtlet](https://github.com/Mirantis/virtlet) for VM-based workloads, and also adds VM operation(start，stop, mount，etc.) via CustomResourceDefinition. So it supports VM，Kata containers and runc which can orchestrate in a unified way.
+OTE-Stack leverages [virtlet](https://github.com/Mirantis/virtlet) for VM-based workloads, and also adds VM operation(start, stop, mount, etc.) via CustomResourceDefinition. So it supports VM, Kata containers and runc which can orchestrate in a unified way.
 
 ### Kubernetes native support
 With OTE-Stack, users can orchestrate dockers/VM on Edge clusters just like a traditional kubernetes cluster in the Cloud.
@@ -58,7 +58,7 @@ OTE-Stack features a pluggable architecture, making it much easier to build on.
    * Users can configure their own cluster name or add cluster tags to achieve complex cluster management.
    * Used for receiving messages sent by **EdgeTunnel** and forwarding them to **Cluster Selecter** for routing or direct transmission to **ClusterHandler** after processing.
    * Receive messages sent back by **ClusterHandler** or shim (such as changes in sub-cluster, status, etc.) and pass them to the upper cluster through **EdgeTunnel** after processing.
-   * Once the connection between the current cluster and the parent cluster is established, the sibling cluster of the parent, the parent cluster of the parent and the sibling cluster of itself will be automatically acquired as the alternative cluster. When Disconnected，the alternative one is connected automatically. The connection to the central can be quickly restored. Meanwhile, it regularly checks whether the previous parent cluster is restored, and once restored, it restores the previous connection topology.
+   * Once the connection between the current cluster and the parent cluster is established, the sibling cluster of the parent, the parent cluster of the parent and the sibling cluster of itself will be automatically acquired as the alternative cluster. When Disconnected, the alternative one is connected automatically. The connection to the central can be quickly restored. Meanwhile, it regularly checks whether the previous parent cluster is restored, and once restored, it restores the previous connection topology.
  * **ClusterSelecter**
  > It is used to complete the routing of cluster messages, and it accepts the processing of two kinds of cluster routing rules.
    * If it is a real list of cluster names, it matches the names according to the cluster routing rules and looks for the next hop until it reaches the specified cluster accurately.
