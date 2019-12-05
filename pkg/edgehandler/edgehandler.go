@@ -103,7 +103,6 @@ func (e *edgeHandler) Start() error {
 		return fmt.Errorf("fail to init shim client")
 	}
 
-	go e.handleRespFromShimClient()
 	e.edgeTunnel = tunnel.NewEdgeTunnel(e.conf)
 	e.edgeTunnel.RegistReceiveMessageHandler(e.receiveMessageFromTunnel)
 	e.edgeTunnel.RegistAfterConnectToHook(e.afterConnect)
@@ -111,6 +110,8 @@ func (e *edgeHandler) Start() error {
 	if err := e.edgeTunnel.Start(); err != nil {
 		return err
 	}
+
+	go e.handleRespFromShimClient()
 
 	go e.sendMessageToTunnel()
 	return nil

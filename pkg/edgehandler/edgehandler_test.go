@@ -31,6 +31,7 @@ import (
 	"github.com/baidu/ote-stack/pkg/clustershim"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
+	"github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
@@ -489,6 +490,25 @@ func TestStart(t *testing.T) {
 			},
 			ExpectErr: true,
 		},
+		{
+			Name: "shim is ready",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             fake.NewSimpleClientset(),
+				ParentCluster:         "127.0.0.1:8287",
+				KubeConfig:            "",
+				TunnelListenAddr:      "test",
+			},
+			ExpectErr: false,
+		},
+	}
+
+	ctInter := tunnel.NewCloudTunnel("127.0.0.1:8287")
+
+	err := ctInter.Start()
+	if err != nil {
+		t.Errorf("start cloud tunnel failed")
 	}
 
 	for _, ct := range casetest {
