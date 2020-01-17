@@ -469,3 +469,16 @@ func TestCheckName(t *testing.T) {
 	ret := c.checkClusterName(registry)
 	assert.Equal(t, false, ret)
 }
+
+func TestHandleMessageFromCloudTunnel(t *testing.T) {
+	go func() {
+		msg := <-ChildMessageChan
+		for client, data := range msg {
+			assert.Equal(t, "c1", client)
+			assert.Equal(t, []byte("1"), data)
+		}
+	}()
+
+	c := &clusterHandler{}
+	c.handleMessageFromCloudTunnel("c1", []byte("1"))
+}

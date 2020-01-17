@@ -39,12 +39,16 @@ import (
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
+// ChildMsg is the data that cluster handler receives from a child client.
+type ChildMsg map[string][]byte
+
 const (
 	controllerManagerChanBufferSize = 100
 )
 
 var (
 	mergeToApiserverMutex = &sync.Mutex{}
+	ChildMessageChan      = make(chan ChildMsg, 10000)
 )
 
 // ClusterHandler is the interface to do cluster handler job.
@@ -86,12 +90,40 @@ func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error
 		return c.LeaderListenAddr
 	})
 	tunn.RegistCheckNameValidFunc(ch.checkClusterName)
-	tunn.RegistReturnMessageFunc(ch.handleMessageFromChild)
+	tunn.RegistReturnMessageFunc(ch.handleMessageFromCloudTunnel)
 	tunn.RegistClientCloseHandler(ch.closeChild)
 	tunn.RegistAfterConnectHook(ch.afterClusterConnect)
 	tunn.RegistControllerManagerMsgHandler(ch.controllerMsgHandler)
 	ch.tunn = tunn
 	return ch, nil
+}
+
+// handleMessageFromCloudTunnel gets message from cloud tunnel and put it into ChildMessageChan.
+func (c *clusterHandler) handleMessageFromCloudTunnel(client string, data []byte) (ret error) {
+	msg := ChildMsg{
+		client: data,
+	}
+
+	select {
+	case ChildMessageChan <- msg:
+		return nil
+	default:
+		return fmt.Errorf("ChildMessageChan is full")
+	}
+}
+
+// handleChildMessage has multi tasks for handling the msf from ChildMessageChan.
+func (c *clusterHandler) handleChildMessage() {
+	for i := 0; i < 10; i++ {
+		go func() {
+			for {
+				msg := <-ChildMessageChan
+				for client, data := range msg {
+					c.handleMessageFromChild(client, data)
+				}
+			}
+		}()
+	}
 }
 
 // valid check if config of cluster handler is valid, return error if it is invalid.
@@ -144,6 +176,9 @@ func (c *clusterHandler) Start() error {
 	if err := c.tunn.Start(); err != nil {
 		return err
 	}
+
+	// handle message from child
+	c.handleChildMessage()
 
 	// handle message from parent
 	go c.handleMessageFromParent()

@@ -265,6 +265,7 @@ func TestSendMessageToTunnel(t *testing.T) {
 			edgeTunnel: &fakeEdgeTunnel{},
 		}
 		go edge.sendMessageToTunnel()
+		go edge.sendMessageToParent()
 		edge.conf.ClusterToEdgeChan <- ct.SendData
 		time.Sleep(1 * time.Second)
 		assert.True(t, proto.Equal(&ct.SendData, &LastSend))
@@ -435,6 +436,7 @@ func TestReportSubTree(t *testing.T) {
 	e.edgeTunnel = f
 	// add route
 	clusterrouter.Router().AddRoute("c1", "c2")
+	go e.sendMessageToParent()
 	go func() {
 		// get a subtree msg
 		msg := <-f.fakeEdgeTunnelSendChan

@@ -36,6 +36,8 @@ import (
 
 var (
 	subtreeReportDuration = 1 * time.Second
+	sendToParentDuration  = 1 * time.Second
+	sendToParentChan      = make(chan []byte, 10000)
 )
 
 // EdgeHandler is edgehandler interface that process messages from tunnel and transmit to shim.
@@ -111,20 +113,28 @@ func (e *edgeHandler) Start() error {
 		return err
 	}
 
+	go e.sendMessageToParent()
+
 	go e.handleRespFromShimClient()
 
 	go e.sendMessageToTunnel()
 	return nil
 }
 
+// sendMessageToParent has multi tasks for reading the message from sendToParentChan,
+// and sending the message to parent cluster.
+func (e *edgeHandler) sendMessageToParent() {
+	for {
+		data := <-sendToParentChan
+		e.edgeTunnel.Send(data)
+	}
+}
+
 func (e *edgeHandler) sendMessageToTunnel() {
 	for {
 		msg := <-e.conf.ClusterToEdgeChan
-		data, err := proto.Marshal(&msg)
-		if err != nil {
-			continue
-		}
-		go e.edgeTunnel.Send(data)
+
+		e.sendToParent(&msg)
 	}
 }
 
@@ -262,7 +272,12 @@ func (e *edgeHandler) sendToParent(msg *clustermessage.ClusterMessage) error {
 		return err
 	}
 
-	go e.edgeTunnel.Send(data)
+	select {
+	case sendToParentChan <- data:
+		klog.V(5).Info("send msg to parent success")
+	case <-time.After(sendToParentDuration):
+		klog.V(5).Info("send msg to parent time out")
+	}
 
 	return nil
 }
