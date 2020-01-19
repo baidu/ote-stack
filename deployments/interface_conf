@@ -1,0 +1,22 @@
+# interface_conf is the config file for create_yml.sh to use.
+# please refer to docs/install-scripts.md about how to install ote-stack.
+
+
+# Fill in the node name in k8s cluster.
+# If it is a k8s cluster with only one node, all node_name should be the same.
+node1_name=k8s-node1
+node2_name=k8s-node2
+
+# Fill in the docker image address of all modules.
+# It can be a public harbor repository or a private harbor repository.
+harbor_image_addr=ote-harbor.baidu.com/ote
+# Fill in the imagePullSecrets for k8s if necessary.
+# If docker image is public, we don't care about this value.
+harbor_secret_name=harbor_secret
+
+# ote-web needs to manage the harbor and stores helm charts in the harbor
+# Fill in the variables related to harbor
+harbor_api_addr=http://1.2.3.4:8702
+harbor_admin_user=admin
+harbor_admin_passwd=123456
+repository_domain=ote-harbor.baidu.com
