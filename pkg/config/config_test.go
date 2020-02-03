@@ -23,6 +23,6 @@ import (
 )
 
 func TestIsRoot(t *testing.T) {
-	assert.True(t, IsRoot("Root"))
+	assert.True(t, IsRoot("root"))
 	assert.False(t, IsRoot("a"))
 }

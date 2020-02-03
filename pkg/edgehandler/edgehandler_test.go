@@ -140,6 +140,15 @@ func TestValid(t *testing.T) {
 				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
+		{
+			Name: "rootcc and shim is set",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				K8sClient:             nil,
+				RemoteShimAddr:        ":8262",
+			},
+		},
 	}
 
 	for _, sc := range succescase {
@@ -178,6 +187,16 @@ func TestValid(t *testing.T) {
 				K8sClient:      nil,
 				RemoteShimAddr: ":8262",
 				ParentCluster:  "",
+			},
+		},
+		{
+			Name: "root cc and remote shim is not set",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				K8sClient:             nil,
+				RemoteShimAddr:        "",
+				ParentCluster:         "",
 			},
 		},
 	}
@@ -459,6 +478,19 @@ func TestReportSubTree(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	shimServer := clustershim.NewShimServer()
+	go shimServer.Serve("127.0.0.1:8262")
+
+	testChan := make(chan *clustermessage.ClusterMessage)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_Reserved,
+		},
+	}
+	go func() {
+		testChan <- msg
+	}()
+
 	casetest := []struct {
 		Name      string
 		Conf      *config.ClusterControllerConfig
@@ -501,6 +533,17 @@ func TestStart(t *testing.T) {
 				ParentCluster:         "127.0.0.1:8287",
 				KubeConfig:            "",
 				TunnelListenAddr:      "test",
+			},
+			ExpectErr: false,
+		},
+		{
+			Name: "root cc and shim is ready",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				TunnelListenAddr:      "test",
+				RemoteShimAddr:        "127.0.0.1:8262",
+				RootClusterToEdgeChan: testChan,
 			},
 			ExpectErr: false,
 		},

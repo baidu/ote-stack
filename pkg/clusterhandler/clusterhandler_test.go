@@ -30,11 +30,13 @@ import (
 	"github.com/baidu/ote-stack/pkg/clusterrouter"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
+	"github.com/baidu/ote-stack/pkg/k8sclient"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
 var (
-	fakeTunn = newFakeCloudTunnel()
+	fakeTunn  = newFakeCloudTunnel()
+	expectMsg = &clustermessage.ClusterMessage{}
 )
 
 func TestInit(t *testing.T) {
@@ -70,6 +72,13 @@ func TestInit(t *testing.T) {
 	h2, err := NewClusterHandler(h.conf)
 	assert.Nil(t, err)
 	assert.NotNil(t, h2)
+
+	h.conf.RemoteShimAddr = "test"
+	h.conf.ClusterUserDefineName = "root"
+	h.conf.ParentCluster = ""
+	h3, err := NewClusterHandler(h.conf)
+	assert.Nil(t, err)
+	assert.NotNil(t, h3)
 }
 
 /*
@@ -147,6 +156,33 @@ func TestSendToChild(t *testing.T) {
 //	}
 //	c.addClusterController()
 //}
+func TestAddClusterController(t *testing.T) {
+	c := &clusterHandler{
+		conf: &config.ClusterControllerConfig{
+			RootClusterToEdgeChan: make(chan *clustermessage.ClusterMessage),
+		},
+		rootClusterEnable: true,
+	}
+
+	cc := &otev1.ClusterController{
+		ObjectMeta: metav1.ObjectMeta{
+			CreationTimestamp: metav1.NewTime(time.Now()),
+		},
+	}
+
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_Reserved,
+		},
+	}
+
+	go func() {
+		msg = <-c.conf.RootClusterToEdgeChan
+		assert.Equal(t, clustermessage.CommandType_ControlReq, msg.Head.Command)
+	}()
+
+	c.addClusterController(cc)
+}
 
 func TestStart(t *testing.T) {
 	fakeK8sClient := oteclient.NewSimpleClientset()
@@ -158,9 +194,12 @@ func TestStart(t *testing.T) {
 			EdgeToClusterChan:     make(chan clustermessage.ClusterMessage),
 			ClusterToEdgeChan:     make(chan clustermessage.ClusterMessage),
 			ClusterUserDefineName: config.RootClusterName,
+			RemoteShimAddr:        "0.0.0.0",
+			RootEdgeToClusterChan: make(chan *clustermessage.ClusterMessage, 1),
 		},
-		tunn:      fakeTunn,
-		k8sEnable: false,
+		tunn:              fakeTunn,
+		k8sEnable:         false,
+		rootClusterEnable: false,
 	}
 	err := c.valid()
 	assert.Nil(t, err)
@@ -179,6 +218,18 @@ func TestStart(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	assert.False(t, fakeTunn.broadcastCalled)
 	assert.True(t, fakeTunn.sendCalled)
+
+	expectMsg.Head = &clustermessage.MessageHead{
+		Command: clustermessage.CommandType_Reserved,
+	}
+	testMsg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_EdgeReport,
+		},
+	}
+	c.conf.RootEdgeToClusterChan <- testMsg
+	time.Sleep(time.Second * time.Duration(1))
+	assert.Equal(t, clustermessage.CommandType_EdgeReport, expectMsg.Head.Command)
 }
 
 func TestAfterClusterConnect(t *testing.T) {
@@ -255,18 +306,27 @@ func TestControllerMsgHandler(t *testing.T) {
 	msg := &clustermessage.ClusterMessage{
 		Head: &clustermessage.MessageHead{},
 	}
-	ccbytes, err := proto.Marshal(msg)
+	ccbytes1, err := proto.Marshal(msg)
 	assert.Nil(t, err)
-	err = c.controllerMsgHandler("c1", ccbytes)
+	err = c.controllerMsgHandler("c1", ccbytes1)
 	assert.Nil(t, err)
 	msgFromChan := <-c.conf.EdgeToClusterChan
 	assert.Equal(t, c.conf.ClusterName, msgFromChan.Head.ParentClusterName)
 	// msg unmarshal success but with nil head
 	msg = &clustermessage.ClusterMessage{}
-	ccbytes, err = proto.Marshal(msg)
+	ccbytes2, err := proto.Marshal(msg)
 	assert.Nil(t, err)
-	err = c.controllerMsgHandler("c1", ccbytes)
+	err = c.controllerMsgHandler("c1", ccbytes2)
 	assert.NotNil(t, err)
+
+	c.rootClusterEnable = true
+	c.conf.RootClusterToEdgeChan = make(chan *clustermessage.ClusterMessage)
+	go func() {
+		msg = <-c.conf.RootClusterToEdgeChan
+		assert.Equal(t, c.conf.ClusterName, msg.Head.ParentClusterName)
+	}()
+	err = c.controllerMsgHandler("root", ccbytes1)
+	assert.Nil(t, err)
 }
 
 func TestHandleRegistClusterMessage(t *testing.T) {
@@ -393,6 +453,11 @@ func (f *fakeCloudTunnel) Broadcast(msg []byte) {
 }
 
 func (f *fakeCloudTunnel) SendToControllerManager(msg []byte) error {
+	err := proto.Unmarshal(msg, expectMsg)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -481,4 +546,47 @@ func TestHandleMessageFromCloudTunnel(t *testing.T) {
 
 	c := &clusterHandler{}
 	c.handleMessageFromCloudTunnel("c1", []byte("1"))
+}
+
+func TestNewRootCluster(t *testing.T) {
+	c := &clusterHandler{
+		conf: &config.ClusterControllerConfig{
+			ClusterName:      "c1",
+			TunnelListenAddr: "",
+		},
+	}
+
+	cluster := c.newRootCluster()
+	assert.NotNil(t, cluster)
+}
+
+func TestCreateOrUpdateCluster(t *testing.T) {
+	fakeK8sClient := oteclient.NewSimpleClientset()
+	clusterCRD := k8sclient.NewClusterCRD(fakeK8sClient)
+
+	c := &clusterHandler{
+		conf: &config.ClusterControllerConfig{
+			ClusterName:      "c1",
+			TunnelListenAddr: "",
+		},
+		clusterCRD: clusterCRD,
+	}
+
+	cluster := &otev1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.conf.ClusterName,
+			Namespace: otev1.ClusterNamespace,
+		},
+		Spec: otev1.ClusterSpec{
+			Name: c.conf.ClusterName,
+		},
+		Status: otev1.ClusterStatus{
+			Listen:     c.conf.TunnelListenAddr,
+			ParentName: "",
+			Timestamp:  time.Now().Unix(),
+		},
+	}
+
+	err := c.createOrUpdateCluster(cluster)
+	assert.Nil(t, err)
 }

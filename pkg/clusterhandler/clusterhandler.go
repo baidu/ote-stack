@@ -44,6 +44,7 @@ type ChildMsg map[string][]byte
 
 const (
 	controllerManagerChanBufferSize = 100
+	rootEdgeToClusterTaskNum        = 10
 )
 
 var (
@@ -63,6 +64,7 @@ type clusterHandler struct {
 	clusterCRD           *k8sclient.ClusterCRD
 	clusterControllerCRD *k8sclient.ClusterControllerCRD
 	k8sEnable            bool
+	rootClusterEnable    bool
 	// msg from clusters back to controller manager
 	backToControllerManagerChan chan clustermessage.ClusterMessage
 	// msg from controller manager to publish to clusters
@@ -72,8 +74,9 @@ type clusterHandler struct {
 // NewClusterHandler news a ClusterHandler by ClusterControllerConfig.
 func NewClusterHandler(c *config.ClusterControllerConfig) (ClusterHandler, error) {
 	ch := &clusterHandler{
-		conf:      c,
-		k8sEnable: false,
+		conf:              c,
+		rootClusterEnable: false,
+		k8sEnable:         false,
 		backToControllerManagerChan: make(chan clustermessage.ClusterMessage,
 			controllerManagerChanBufferSize),
 		controllerManagerPublishChan: make(chan clustermessage.ClusterMessage,
@@ -141,6 +144,12 @@ func (c *clusterHandler) valid() error {
 	if c.conf.TunnelListenAddr == "" {
 		return fmt.Errorf("listen tunn is empty, listen addr is " + c.conf.TunnelListenAddr)
 	}
+
+	// if it is root, and root cc connects to shim, it can be a single root cluster.
+	if c.isRoot() && c.conf.RemoteShimAddr != "" {
+		c.rootClusterEnable = true
+	}
+
 	// if it is root, must connect to k8s
 	if c.isRoot() {
 		if c.conf.K8sClient == nil {
@@ -185,6 +194,13 @@ func (c *clusterHandler) Start() error {
 
 	// watch k8s apiserver for clustercontroller crd if k8s is enable
 	if c.k8sEnable {
+		if c.rootClusterEnable {
+			cluster := c.newRootCluster()
+			if err := c.createOrUpdateCluster(cluster); err != nil {
+				return err
+			}
+		}
+
 		factory := oteinformer.NewSharedInformerFactoryWithOptions(c.conf.K8sClient,
 			config.K8sInformerSyncDuration*time.Second,
 			oteinformer.WithNamespace(otev1.ClusterNamespace))
@@ -200,6 +216,14 @@ func (c *clusterHandler) Start() error {
 			},
 		})
 		go informer.Run(stopper)
+	}
+
+	// if root cc connects to shim, it should handle message from shim.
+	if c.rootClusterEnable {
+		// handle message from edgeHandler
+		for i := 0; i < rootEdgeToClusterTaskNum; i++ {
+			go c.handleMessageFromEdgeHandler()
+		}
 	}
 
 	// TODO if this is root, regist self to etcd
@@ -227,6 +251,14 @@ func (c *clusterHandler) addClusterController(cc *otev1.ClusterController) {
 		klog.Errorf("cluster msg is nil when add a crd %v", cc)
 		return
 	}
+
+	// if root cc connects to shim, send to root edgehandler.
+	if c.rootClusterEnable {
+		// send to edgeHandler
+		c.conf.RootClusterToEdgeChan <- msg
+		return
+	}
+
 	// send to child
 	// directed broadcast by cluster selector
 	selectedChild := selectChild(msg)
@@ -322,6 +354,21 @@ func (c *clusterHandler) handleMessageFromParent() {
 			// broadcast to all childs if do not use selector
 			// c.sendToChild(msg)
 		}
+	}
+}
+
+// handleMessageFromEdgeHandler receives msg from root edgeHandler and sends to cm.
+func (c *clusterHandler) handleMessageFromEdgeHandler() {
+	for {
+		msg := <-c.conf.RootEdgeToClusterChan
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			klog.Errorf("handleMessageFromEdge failed: %v", err)
+			continue
+		}
+
+		// msg from root edgeHandler sent to controllerManager.
+		c.handleMessageFromChild(config.RootClusterName, data)
 	}
 }
 
@@ -489,23 +536,9 @@ func (c *clusterHandler) handleRegistClusterMessage(
 	}
 
 	if c.isRoot() {
-		old := c.clusterCRD.Get(cluster.ObjectMeta.Namespace, cluster.ObjectMeta.Name)
-		if old == nil {
-			cluster.Status.Status = otev1.ClusterStatusOnline
-			cluster.Status.Timestamp = time.Now().Unix()
-			c.clusterCRD.Create(cluster)
-		} else {
-			// update cluster status to online
-			old.Status.Status = otev1.ClusterStatusOnline
-			old.Status.Timestamp = cluster.Status.Timestamp
-			old.Status.Listen = cluster.Status.Listen
-			old.Status.ParentName = cluster.Status.ParentName
-			err = c.clusterCRD.UpdateStatus(old)
-			if err != nil {
-				ret = fmt.Errorf("update cluster status failed: %v", err)
-				klog.Error(err)
-				return
-			}
+		if ret = c.createOrUpdateCluster(cluster); ret != nil {
+			klog.Error(ret)
+			return
 		}
 	} else {
 		c.transmitToParent(msg)
@@ -715,8 +748,57 @@ func (c *clusterHandler) controllerMsgHandler(clientName string, data []byte) er
 	if msg.Head.ParentClusterName == "" {
 		msg.Head.ParentClusterName = c.conf.ClusterName
 	}
-	// send to downstream channel
-	c.conf.EdgeToClusterChan <- *msg
+
+	if c.rootClusterEnable {
+		// send to root edgeHandler
+		c.conf.RootClusterToEdgeChan <- msg
+	} else {
+		// send to downstream channel
+		c.conf.EdgeToClusterChan <- *msg
+	}
+
+	return nil
+}
+
+// newRootCluster creates a root cluster.
+func (c *clusterHandler) newRootCluster() *otev1.Cluster {
+	return &otev1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.conf.ClusterName,
+			Namespace: otev1.ClusterNamespace,
+		},
+		Spec: otev1.ClusterSpec{
+			Name: c.conf.ClusterName,
+		},
+		Status: otev1.ClusterStatus{
+			Listen:     c.conf.TunnelListenAddr,
+			ParentName: "",
+			Timestamp:  time.Now().Unix(),
+		},
+	}
+}
+
+// createOrUpdateCluster creates cluster or updates cluster if cluster is already exit.
+func (c *clusterHandler) createOrUpdateCluster(cluster *otev1.Cluster) error {
+	old := c.clusterCRD.Get(cluster.ObjectMeta.Namespace, cluster.ObjectMeta.Name)
+
+	if old == nil {
+		cluster.Status.Status = otev1.ClusterStatusOnline
+		cluster.Status.Timestamp = time.Now().Unix()
+		c.clusterCRD.Create(cluster)
+	} else {
+		// update cluster status to online
+		old.Status.Status = otev1.ClusterStatusOnline
+		old.Status.Timestamp = cluster.Status.Timestamp
+		old.Status.Listen = cluster.Status.Listen
+		old.Status.ParentName = cluster.Status.ParentName
+
+		err := c.clusterCRD.UpdateStatus(old)
+		if err != nil {
+			return fmt.Errorf("update cluster status failed: %v", err)
+		}
+	}
+
 	return nil
 }
 

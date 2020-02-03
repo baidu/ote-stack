@@ -28,7 +28,7 @@ import (
 
 const (
 	// RootClusterName defines the cluster name of root cluster.
-	RootClusterName = "Root"
+	RootClusterName = "root"
 
 	// ClusterConnectHeaderListenAddr defines request header to post listen address of the child.
 	// For edge when connect to parent, set this header to address listened by the cluster,
@@ -59,6 +59,8 @@ type ClusterControllerConfig struct {
 	K8sClient             oteclient.Interface
 	EdgeToClusterChan     chan clustermessage.ClusterMessage
 	ClusterToEdgeChan     chan clustermessage.ClusterMessage
+	RootEdgeToClusterChan chan *clustermessage.ClusterMessage
+	RootClusterToEdgeChan chan *clustermessage.ClusterMessage
 }
 
 // ClusterRegistry defines a data structure to use when a cluster regists.
