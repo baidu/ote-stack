@@ -84,8 +84,6 @@ func (e *edgeHandler) valid() error {
 	if e.isRoot() && e.isRemoteShim() {
 		// if it is root cc, and connectes to shim, it should can be a single root cluster.
 		e.rootClusterEnable = true
-	} else if e.isRoot() && !e.isRemoteShim() {
-		return fmt.Errorf("root cc's remoteshim is not set")
 	}
 
 	return nil
@@ -113,12 +111,12 @@ func (e *edgeHandler) Start() error {
 			}
 			time.Sleep(shimConnectedRetryDuration)
 		}
-	} else {
+	} else if !e.isRoot() {
 		klog.Infof("init local shim client")
 		e.shimClient = clustershim.NewlocalShimClient(e.conf)
 	}
 
-	if e.shimClient == nil {
+	if e.shimClient == nil && (e.rootClusterEnable || !e.isRoot()) {
 		return fmt.Errorf("fail to init shim client")
 	}
 
