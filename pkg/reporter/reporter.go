@@ -156,6 +156,7 @@ func NewReporterInitializers() map[string]InitFunc {
 	return reporters
 }
 
+// IsValid returns the base validation result.
 func (ctx *BaseReporterContext) IsValid() bool {
 	if ctx == nil {
 		klog.Errorf("Failed to create new reporter, ctx is nil")
@@ -191,7 +192,12 @@ func (ctx *ReporterContext) IsValid() bool {
 
 // ToClusterMessage packs the Report infomation into clustermessage.
 func (r Reports) ToClusterMessage(clusterName string) (*clustermessage.ClusterMessage, error) {
-	body, err := json.Marshal(r)
+	return ToClusterMessage(clusterName, r)
+}
+
+// ToClusterMessage packs the obj into clustermessage.
+func ToClusterMessage(clusterName string, obj interface{}) (*clustermessage.ClusterMessage, error) {
+	body, err := json.Marshal(obj)
 	if err != nil {
 		return nil, err
 	}
