@@ -101,9 +101,11 @@ func Run() error {
 	defer cancel()
 
 	reporterContext := &reporter.ReporterContext{
-		ClusterName: s.ClusterName,
-		SyncChan:    s.SendChan(),
-		KubeClient:  k8sClient,
+		BaseReporterContext: reporter.BaseReporterContext{
+			ClusterName: s.ClusterName,
+			SyncChan:    s.SendChan(),
+		},
+		KubeClient: k8sClient,
 	}
 
 	go func() {

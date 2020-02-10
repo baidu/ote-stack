@@ -59,12 +59,14 @@ func (f *fixture) newPodReporter() *PodReporter {
 	k8sI := kubeinformers.NewSharedInformerFactory(f.kubeclient, noResyncPeriodFunc())
 
 	ctx := &ReporterContext{
-		InformerFactory: k8sI,
-		ClusterName: func() string {
-			return clusterName
+		BaseReporterContext: BaseReporterContext{
+			ClusterName: func() string {
+				return clusterName
+			},
+			SyncChan: make(chan clustermessage.ClusterMessage),
+			StopChan: make(chan struct{}),
 		},
-		SyncChan: make(chan clustermessage.ClusterMessage),
-		StopChan: make(chan struct{}),
+		InformerFactory: k8sI,
 	}
 
 	podReporter, err := newPodReporter(ctx)

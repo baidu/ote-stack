@@ -117,16 +117,21 @@ type EventResourceStatus struct {
 	FullList []*corev1.Event `json:"fullList"`
 }
 
-// ReporterContext defines the context object for reporter.
-type ReporterContext struct {
-	// InformerFactory gives access to informers for the reporter.
-	InformerFactory informers.SharedInformerFactory
+// BaseReporterContext defines base information of a reporter.
+type BaseReporterContext struct {
 	// ClusterName gets the cluster name.
 	ClusterName func() string
 	// SyncChan is used for synchronizing status of the edge cluster.
 	SyncChan chan clustermessage.ClusterMessage
 	// StopChan is the stop channel.
 	StopChan chan struct{}
+}
+
+// ReporterContext defines the context object for k8s reporter.
+type ReporterContext struct {
+	BaseReporterContext
+	// InformerFactory gives access to informers for the reporter.
+	InformerFactory informers.SharedInformerFactory
 	// KubeClient is the kubernetes client interface for the reporter to use.
 	KubeClient kubernetes.Interface
 }
@@ -151,14 +156,9 @@ func NewReporterInitializers() map[string]InitFunc {
 	return reporters
 }
 
-// IsValid returns the ReporterContext validation result.
-func (ctx *ReporterContext) IsValid() bool {
+func (ctx *BaseReporterContext) IsValid() bool {
 	if ctx == nil {
 		klog.Errorf("Failed to create new reporter, ctx is nil")
-		return false
-	}
-	if ctx.InformerFactory == nil {
-		klog.Errorf("Failed to create new reporter, InformerFactory is nil")
 		return false
 	}
 	if ctx.SyncChan == nil {
@@ -167,6 +167,22 @@ func (ctx *ReporterContext) IsValid() bool {
 	}
 	if ctx.StopChan == nil {
 		klog.Errorf("Failed to create new reporter, StopChan is nil")
+		return false
+	}
+	return true
+}
+
+// IsValid returns the ReporterContext validation result.
+func (ctx *ReporterContext) IsValid() bool {
+	if ctx == nil {
+		klog.Errorf("Failed to create new reporter, ctx is nil")
+		return false
+	}
+	if !ctx.BaseReporterContext.IsValid() {
+		return false
+	}
+	if ctx.InformerFactory == nil {
+		klog.Errorf("Failed to create new reporter, InformerFactory is nil")
 		return false
 	}
 
