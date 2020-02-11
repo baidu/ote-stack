@@ -38,7 +38,7 @@ var (
 	subtreeReportDuration       = 1 * time.Second
 	sendToParentTimeout         = 1 * time.Second
 	sendToParentChan            = make(chan []byte, 10000)
-	shimConnectedRetryTime      = 20
+	shimConnectedRetryTime      = 60
 	shimConnectedRetryDuration  = 1 * time.Second
 	sendToClusterHandlerTimeout = 1 * time.Second
 )
