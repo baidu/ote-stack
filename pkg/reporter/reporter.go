@@ -139,6 +139,9 @@ type ReporterContext struct {
 // InitFunc is used to launch a particular reporter.
 type InitFunc func(ctx *ReporterContext) error
 
+// BaseInitFunc is used to launch a particular reporter.
+type BaseInitFunc func(ctx *BaseReporterContext) error
+
 // NewReporterInitializers returns a public map of named reporter groups paired to their InitFunc.
 func NewReporterInitializers() map[string]InitFunc {
 	reporters := map[string]InitFunc{}
