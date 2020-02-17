@@ -41,7 +41,7 @@ spec:
       volumes:
       - name: etcd-data
         hostPath:
-          path: /home/work/ote/etcd-data/  
+          path: /home/work/ote/etcd-data/
 ---
 
 apiVersion: v1

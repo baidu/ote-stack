@@ -75,7 +75,7 @@ spec:
         command: ['sh', '-c', 'until curl ote-mysql:8306; do echo waiting for mysql; sleep 2; done;']
       containers:
       - name: open-api
-        image: _HARBOR_IMAGE_ADDR_/open-api-go:0.1.2
+        image: _HARBOR_IMAGE_ADDR_/open-api-go:0.1.5.8
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - name: halo-ssl

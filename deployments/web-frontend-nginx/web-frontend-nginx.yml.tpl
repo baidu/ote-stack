@@ -37,7 +37,7 @@ spec:
       nodeSelector:
         monitor: deploy
       containers:
-      - image: _HARBOR_IMAGE_ADDR_/ote-unified-fe:v0.1.11
+      - image: _HARBOR_IMAGE_ADDR_/ote-unified-fe:v0.1.14
         imagePullPolicy: IfNotPresent
         name: web-frontend-nginx
         ports:

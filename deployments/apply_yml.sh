@@ -41,9 +41,8 @@ function start {
     kube_apiserver_host_ip=$(kubectl get node -o wide -l cc=deploy | grep -w Ready | head -1 | awk '{print $6}')
     kube_apiserver_port=9082
     while true; do
-        nc -vz -w 3 $kube_apiserver_host_ip $kube_apiserver_port
-        [ $? -eq 0 ] && break
-	    echo_info "sleep 5s and wait for kube-apiserver ready" && sleep 5
+        nc -vz -w 3 $kube_apiserver_host_ip $kube_apiserver_port && [ $? -eq 0 ] && break
+        echo_info "sleep 5s and wait for kube-apiserver ready" && sleep 5
     done
 
     kubectl apply -f kube-apiserver/ns.yml -s $kube_apiserver_host_ip:$kube_apiserver_port

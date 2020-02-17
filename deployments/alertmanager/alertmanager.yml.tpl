@@ -87,7 +87,7 @@ spec:
           name: alertmanager-config
       - name: alertmanager-data
         hostPath:
-          path: /home/work/ote/alertmanager-data/       
+          path: /home/work/ote/alertmanager-data/
 ---
 
 apiVersion: v1

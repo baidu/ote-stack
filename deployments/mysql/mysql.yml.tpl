@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ote-mysql 
-  namespace: kube-system 
+  name: ote-mysql
+  namespace: kube-system
   labels:
     app: ote-mysql
   annotations:
@@ -21,14 +21,14 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: db-sql2
-  namespace: kube-system 
+  namespace: kube-system
 data:
   entrypoint.sh: |
     #!/bin/bash
     # Taken from the official mysql-repo
     # And changed for simplification of course :)
     # I.e. DATADIR is always /var/lib/mysql
-    # We don't force the usage of MYSQL_ALLOW_EMPTY_PASSWORD 
+    # We don't force the usage of MYSQL_ALLOW_EMPTY_PASSWORD
     # erkan.yanar@linsenraum.de
     set -e
     set -x
@@ -39,32 +39,32 @@ data:
     tempSqlFile='/tmp/mysql-first-time.sql'
     MYSQL_ROOT_PASSWORD=123456
     if [ ! -d "/var/lib/mysql/mysql" ]; then
-    
+
        echo 'Running mysql_install_db ...'
        mysql_install_db --datadir=/var/lib/mysql
        echo 'Finished mysql_install_db'
-       
+
        # These statements _must_ be on individual lines, and _must_ end with
        # semicolons (no line breaks or comments are permitted).
        # TODO proper SQL escaping on ALL the things D:
        cat /home/db.sql >> "$tempSqlFile"
-       
+
        cat >> "$tempSqlFile" <<-EOSQL
     -- What's done in this file shouldn't be replicated
     --  or products like mysql-fabric won't work
     SET @@SESSION.SQL_LOG_BIN=0;
-           
+
     DELETE FROM mysql.user ;
     CREATE USER 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' ;
     GRANT ALL ON *.* TO 'root'@'%' WITH GRANT OPTION ;
     DROP DATABASE IF EXISTS test ;
     EOSQL
-   
-   
+
+
         if [ "$MYSQL_DATABASE" ]; then
             echo "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` ;" >> "$tempSqlFile"
         fi
-       
+
         if [ "$MYSQL_USER" -a "$MYSQL_PASSWORD" ]; then
             echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" >> "$tempSqlFile"
             echo "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD' ;" >> "$tempSqlFile"
@@ -73,17 +73,17 @@ data:
             echo "CREATE USER '$MYSQL_USER'@'%'  ;"         >> "$tempSqlFile"
             echo "CREATE USER '$MYSQL_USER'@'localhost'  ;" >> "$tempSqlFile"
         fi
-           
+
         if [ "$MYSQL_USER" -a  "$MYSQL_DATABASE"  ]; then
             echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" >> "$tempSqlFile"
             echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'localhost' ;" >> "$tempSqlFile"
         fi
-       
+
         echo 'FLUSH PRIVILEGES ;' >> "$tempSqlFile"
         set -- "$@" --init-file="$tempSqlFile"
         sed -i "s/skip-grant-tables/#skip-grant-tables/g" /etc/mysql/my-galera.cnf
     fi
-    echo 'port=8306' >> /etc/mysql/my-galera.cnf  
+    echo 'port=8306' >> /etc/mysql/my-galera.cnf
     echo @a
     set -- mysqld "$@"
     chown -R mysql:mysql /var/lib/mysql
@@ -140,7 +140,7 @@ data:
       UNIQUE KEY `tb_ote_web_users_phone_unique` (`phone`) USING BTREE,
       UNIQUE KEY `tb_ote_web_users_user_name_unique` (`user_name`) USING BTREE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci COMMENT='用户信息表';
-    
+
     CREATE TABLE IF NOT EXISTS `tb_ote_web_repository_users` (
       `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
       `namespace` varchar(64) NOT NULL DEFAULT '' COMMENT '命名空间',
@@ -245,7 +245,7 @@ data:
       KEY `name` (`namespace`,`name`),
       KEY `namespace` (`namespace`,`app_name`,`cluster`,`version`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='部署历史';
-    
+
     CREATE TABLE IF NOT EXISTS tb_domain_info (
       `id`       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增ID',
       `namespace`  varchar(64) NOT NULL COMMENT '用户ID',
@@ -257,7 +257,7 @@ data:
       KEY(`namespace`),
       UNIQUE KEY(`domain`)
     ) ENGINE = InnoDB DEFAULT CHARACTER SET = utf8 COMMENT = '域名';
- 
+
     CREATE TABLE IF NOT EXISTS tb_ingress_info (
       `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增ID',
       `namespace`  varchar(64) NOT NULL COMMENT '用户ID',
@@ -282,7 +282,7 @@ data:
       PRIMARY KEY (`id`),
       UNIQUE KEY `service_name` (`service_name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='halo服务表';
- 
+
     CREATE TABLE IF NOT EXISTS tb_halo_package (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增ID',
       package_name varchar(64) NOT NULL COMMENT '用户ID',
@@ -326,7 +326,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: ote-mysql
-  namespace: kube-system 
+  namespace: kube-system
 spec:
   selector:
     matchLabels:
@@ -343,7 +343,7 @@ spec:
       initContainers:
       - name: install
         image:  _HARBOR_IMAGE_ADDR_/galera-install:0.1
-        imagePullPolicy: IfNotPresent 
+        imagePullPolicy: IfNotPresent
         args:
         - "--work-dir=/work-dir"
         volumeMounts:
@@ -353,7 +353,7 @@ spec:
           mountPath: "/etc/mysql"
       - name: bootstrap
         image:  _HARBOR_IMAGE_ADDR_/debian:jessie
-        imagePullPolicy: IfNotPresent 
+        imagePullPolicy: IfNotPresent
         command:
         - "/work-dir/peer-finder"
         args:

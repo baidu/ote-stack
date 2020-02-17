@@ -9,7 +9,7 @@ node2_name=k8s-node2
 
 # Fill in the docker image address of all modules.
 # It can be a public harbor repository or a private harbor repository.
-harbor_image_addr=ote-harbor.baidu.com/ote
+harbor_image_addr=otestack
 # Fill in the imagePullSecrets for k8s if necessary.
 # If docker image is public, we don't care about this value.
 harbor_secret_name=harbor_secret
