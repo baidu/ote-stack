@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	shimRespChanLen = 100
+	shimRespChanLen = 10000
 )
 
 // ShimServiceClient is the client interface to a cluster shim.

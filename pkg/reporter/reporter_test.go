@@ -32,12 +32,14 @@ import (
 func TestIsValid(t *testing.T) {
 	var kubeclient *k8sfake.Clientset
 	ctx := &ReporterContext{
-		InformerFactory: kubeinformers.NewSharedInformerFactory(kubeclient, func() time.Duration { return 0 }()),
-		ClusterName: func() string {
-			return "name1"
+		BaseReporterContext: BaseReporterContext{
+			ClusterName: func() string {
+				return "name1"
+			},
+			SyncChan: make(chan clustermessage.ClusterMessage),
+			StopChan: make(chan struct{}),
 		},
-		SyncChan: make(chan clustermessage.ClusterMessage),
-		StopChan: make(<-chan struct{}),
+		InformerFactory: kubeinformers.NewSharedInformerFactory(kubeclient, func() time.Duration { return 0 }()),
 	}
 
 	//ctx.InformerFactory is empty
@@ -68,8 +70,10 @@ func TestNewReporterInitializers(t *testing.T) {
 
 func TestAddLabelToResource(t *testing.T) {
 	ctx := &ReporterContext{
-		ClusterName: func() string {
-			return "c1"
+		BaseReporterContext: BaseReporterContext{
+			ClusterName: func() string {
+				return "c1"
+			},
 		},
 	}
 

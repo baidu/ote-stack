@@ -37,7 +37,6 @@ spec:
             name:
               type: string
   version: v1
-
 ---
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
@@ -68,7 +67,6 @@ spec:
             body:
               type: string
   version: v1
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
@@ -94,4 +92,3 @@ rules:
   - watch
   - create
   - delete
-

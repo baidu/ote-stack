@@ -31,6 +31,7 @@ import (
 	"github.com/baidu/ote-stack/pkg/clustershim"
 	"github.com/baidu/ote-stack/pkg/config"
 	oteclient "github.com/baidu/ote-stack/pkg/generated/clientset/versioned"
+	"github.com/baidu/ote-stack/pkg/generated/clientset/versioned/fake"
 	"github.com/baidu/ote-stack/pkg/tunnel"
 )
 
@@ -139,6 +140,15 @@ func TestValid(t *testing.T) {
 				ParentCluster:         "127.0.0.1:8287",
 			},
 		},
+		{
+			Name: "rootcc and shim is set",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				K8sClient:             nil,
+				RemoteShimAddr:        ":8262",
+			},
+		},
 	}
 
 	for _, sc := range succescase {
@@ -177,6 +187,16 @@ func TestValid(t *testing.T) {
 				K8sClient:      nil,
 				RemoteShimAddr: ":8262",
 				ParentCluster:  "",
+			},
+		},
+		{
+			Name: "root cc and remote shim is not set",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				K8sClient:             nil,
+				RemoteShimAddr:        "",
+				ParentCluster:         "",
 			},
 		},
 	}
@@ -264,6 +284,7 @@ func TestSendMessageToTunnel(t *testing.T) {
 			edgeTunnel: &fakeEdgeTunnel{},
 		}
 		go edge.sendMessageToTunnel()
+		go edge.sendMessageToParent()
 		edge.conf.ClusterToEdgeChan <- ct.SendData
 		time.Sleep(1 * time.Second)
 		assert.True(t, proto.Equal(&ct.SendData, &LastSend))
@@ -434,6 +455,7 @@ func TestReportSubTree(t *testing.T) {
 	e.edgeTunnel = f
 	// add route
 	clusterrouter.Router().AddRoute("c1", "c2")
+	go e.sendMessageToParent()
 	go func() {
 		// get a subtree msg
 		msg := <-f.fakeEdgeTunnelSendChan
@@ -456,6 +478,19 @@ func TestReportSubTree(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	shimServer := clustershim.NewShimServer()
+	go shimServer.Serve("127.0.0.1:8262")
+
+	testChan := make(chan *clustermessage.ClusterMessage)
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_Reserved,
+		},
+	}
+	go func() {
+		testChan <- msg
+	}()
+
 	casetest := []struct {
 		Name      string
 		Conf      *config.ClusterControllerConfig
@@ -489,6 +524,36 @@ func TestStart(t *testing.T) {
 			},
 			ExpectErr: true,
 		},
+		{
+			Name: "shim is ready",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "child",
+				ClusterUserDefineName: "child",
+				K8sClient:             fake.NewSimpleClientset(),
+				ParentCluster:         "127.0.0.1:8287",
+				KubeConfig:            "",
+				TunnelListenAddr:      "test",
+			},
+			ExpectErr: false,
+		},
+		{
+			Name: "root cc and shim is ready",
+			Conf: &config.ClusterControllerConfig{
+				ClusterName:           "root",
+				ClusterUserDefineName: "root",
+				TunnelListenAddr:      "test",
+				RemoteShimAddr:        "127.0.0.1:8262",
+				RootClusterToEdgeChan: testChan,
+			},
+			ExpectErr: false,
+		},
+	}
+
+	ctInter := tunnel.NewCloudTunnel("127.0.0.1:8287")
+
+	err := ctInter.Start()
+	if err != nil {
+		t.Errorf("start cloud tunnel failed")
 	}
 
 	for _, ct := range casetest {

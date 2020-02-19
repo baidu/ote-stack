@@ -176,27 +176,33 @@ func TestNewClusterStatusReporter(t *testing.T) {
 		{
 			Name: "syncChan is nil",
 			Context: &ReporterContext{
-				SyncChan: nil,
+				BaseReporterContext: BaseReporterContext{
+					SyncChan: nil,
+				},
 			},
 			ExpectError: true,
 		},
 		{
 			Name: "kubeClient is nil",
 			Context: &ReporterContext{
-				SyncChan:        make(chan clustermessage.ClusterMessage),
+				BaseReporterContext: BaseReporterContext{
+					SyncChan: make(chan clustermessage.ClusterMessage),
+					StopChan: make(chan struct{}),
+				},
 				KubeClient:      nil,
 				InformerFactory: informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 1*time.Second),
-				StopChan:        make(chan struct{}),
 			},
 			ExpectError: true,
 		},
 		{
 			Name: "valid context",
 			Context: &ReporterContext{
-				SyncChan:        make(chan clustermessage.ClusterMessage),
+				BaseReporterContext: BaseReporterContext{
+					SyncChan: make(chan clustermessage.ClusterMessage),
+					StopChan: make(chan struct{}),
+				},
 				KubeClient:      fake.NewSimpleClientset(),
 				InformerFactory: informers.NewSharedInformerFactory(fake.NewSimpleClientset(), 1*time.Second),
-				StopChan:        make(chan struct{}),
 			},
 			ExpectError: false,
 		},
@@ -219,11 +225,13 @@ func TestSyncClusterStatus(t *testing.T) {
 	client := fake.NewSimpleClientset(expectNode)
 
 	ctx := &ReporterContext{
-		ClusterName:     func() string { return expectClusterName },
-		SyncChan:        make(chan clustermessage.ClusterMessage, 1),
+		BaseReporterContext: BaseReporterContext{
+			ClusterName: func() string { return expectClusterName },
+			SyncChan:    make(chan clustermessage.ClusterMessage, 1),
+			StopChan:    make(chan struct{}, 1),
+		},
 		KubeClient:      client,
 		InformerFactory: informers.NewSharedInformerFactory(client, 1*time.Second),
-		StopChan:        make(chan struct{}, 1),
 	}
 
 	report, err := newClusterStatusReporter(ctx)

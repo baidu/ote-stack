@@ -265,11 +265,24 @@ func TestWriteMessage(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	stopChan := make(chan int)
 	testShimServer = NewShimServer()
 	go testShimServer.Serve("")
+
+	go func() {
+		for {
+			select {
+			case <-testShimServer.ConnectStatusChan():
+			case <-stopChan:
+				break
+			}
+		}
+	}()
+
 	time.Sleep(time.Second * 1)
 	exit := m.Run()
 	testShimServer.Close()
+	stopChan <- 1
 	os.Exit(exit)
 }
 

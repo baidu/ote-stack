@@ -46,6 +46,9 @@ const (
 	retryPeriod   = 2 * time.Second
 
 	oteRootClusterControllerName = "ote-root-cluster-controller"
+
+	RootClusterToEdgeChanBuffer = 10000
+	RootEdgeToClusterChanBuffer = 10000
 )
 
 var (
@@ -101,7 +104,7 @@ func Run() error {
 	// make client to k8s apiserver if no remote shim available.
 	var oteK8sClient oteclient.Interface
 	var err error
-	if remoteShimAddr == "" {
+	if remoteShimAddr == "" || config.IsRoot(clusterName) {
 		klog.Infof("init k8s client")
 		oteK8sClient, err = k8sclient.NewClient(kubeConfig)
 		if err != nil {
@@ -127,11 +130,15 @@ func Run() error {
 		ClusterToEdgeChan:     clusterToEdgeChan,
 	}
 
-	// start edge/cluster handler.
-	// connect to parent cluster and regist edge handler to the tunnel.
-	edgeHandler := edgehandler.NewEdgeHandler(clusterConfig)
-	if err := edgeHandler.Start(); err != nil {
-		klog.Fatal(err)
+	// if root cc connects to shim, it should use two channel to transfer message.
+	if config.IsRoot(clusterName) && remoteShimAddr != "" {
+		// make a channel for root cc's edge handler reporting message to cluster handler.
+		rootEdgeToClusterChan := make(chan *clustermessage.ClusterMessage, RootEdgeToClusterChanBuffer)
+		// make a channel for root cc's cluster handler returning message to edge handler.
+		rootClusterToEdgeChan := make(chan *clustermessage.ClusterMessage, RootClusterToEdgeChanBuffer)
+
+		clusterConfig.RootEdgeToClusterChan = rootEdgeToClusterChan
+		clusterConfig.RootClusterToEdgeChan = rootClusterToEdgeChan
 	}
 
 	// listen on tunnel for child.
@@ -199,6 +206,13 @@ func Run() error {
 		if err := clusterHandler.Start(); err != nil {
 			klog.Fatal(err)
 		}
+	}
+
+	// start edge/cluster handler.
+	// connect to parent cluster and regist edge handler to the tunnel.
+	edgeHandler := edgehandler.NewEdgeHandler(clusterConfig)
+	if err := edgeHandler.Start(); err != nil {
+		klog.Fatal(err)
 	}
 
 	// hang.

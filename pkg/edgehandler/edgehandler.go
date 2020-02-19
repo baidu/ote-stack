@@ -35,7 +35,12 @@ import (
 )
 
 var (
-	subtreeReportDuration = 1 * time.Second
+	subtreeReportDuration       = 1 * time.Second
+	sendToParentTimeout         = 1 * time.Second
+	sendToParentChan            = make(chan []byte, 10000)
+	shimConnectedRetryTime      = 60
+	shimConnectedRetryDuration  = 1 * time.Second
+	sendToClusterHandlerTimeout = 1 * time.Second
 )
 
 // EdgeHandler is edgehandler interface that process messages from tunnel and transmit to shim.
@@ -50,6 +55,7 @@ type edgeHandler struct {
 	edgeTunnel        tunnel.EdgeTunnel
 	shimClient        clustershim.ShimServiceClient
 	stopReportSubtree chan struct{}
+	rootClusterEnable bool
 }
 
 // NewEdgeHandler returns a edgeHandler object.
@@ -57,6 +63,7 @@ func NewEdgeHandler(c *config.ClusterControllerConfig) EdgeHandler {
 	return &edgeHandler{
 		conf:              c,
 		stopReportSubtree: make(chan struct{}, 1),
+		rootClusterEnable: false,
 	}
 }
 
@@ -67,9 +74,18 @@ func (e *edgeHandler) valid() error {
 	if e.conf.K8sClient == nil && !e.isRemoteShim() {
 		return fmt.Errorf("k8s client is unavailable or remoteshim not set")
 	}
-	if e.conf.ParentCluster == "" {
+	if e.conf.ParentCluster == "" && !e.isRoot() {
 		return fmt.Errorf("parent cluster is empty")
 	}
+	if e.conf.ParentCluster != "" && e.isRoot() {
+		return fmt.Errorf("root cc should not have parent cluster")
+	}
+
+	if e.isRoot() && e.isRemoteShim() {
+		// if it is root cc, and connectes to shim, it should can be a single root cluster.
+		e.rootClusterEnable = true
+	}
+
 	return nil
 }
 
@@ -82,48 +98,73 @@ func (e *edgeHandler) isRemoteShim() bool {
 }
 
 func (e *edgeHandler) Start() error {
-	if e.isRoot() {
-		klog.Infof("will not start edgehandler for root cluster")
-		return nil
-	}
-
 	if err := e.valid(); err != nil {
 		return err
 	}
 
 	if e.isRemoteShim() {
 		klog.Infof("init remote shim client")
-		e.shimClient = clustershim.NewRemoteShimClient(e.conf.ClusterName, e.conf.RemoteShimAddr)
-	} else {
+		for i := 0; i < shimConnectedRetryTime; i++ {
+			e.shimClient = clustershim.NewRemoteShimClient(e.conf.ClusterName, e.conf.RemoteShimAddr)
+			if e.shimClient != nil {
+				break
+			}
+			time.Sleep(shimConnectedRetryDuration)
+		}
+	} else if !e.isRoot() {
 		klog.Infof("init local shim client")
 		e.shimClient = clustershim.NewlocalShimClient(e.conf)
 	}
 
-	if e.shimClient == nil {
+	if e.shimClient == nil && (e.rootClusterEnable || !e.isRoot()) {
 		return fmt.Errorf("fail to init shim client")
 	}
 
-	go e.handleRespFromShimClient()
-	e.edgeTunnel = tunnel.NewEdgeTunnel(e.conf)
-	e.edgeTunnel.RegistReceiveMessageHandler(e.receiveMessageFromTunnel)
-	e.edgeTunnel.RegistAfterConnectToHook(e.afterConnect)
-	e.edgeTunnel.RegistAfterDisconnectHook(e.afterDisconnect)
-	if err := e.edgeTunnel.Start(); err != nil {
-		return err
+	if !e.isRoot() {
+		e.edgeTunnel = tunnel.NewEdgeTunnel(e.conf)
+		e.edgeTunnel.RegistReceiveMessageHandler(e.receiveMessageFromTunnel)
+		e.edgeTunnel.RegistAfterConnectToHook(e.afterConnect)
+		e.edgeTunnel.RegistAfterDisconnectHook(e.afterDisconnect)
+		if err := e.edgeTunnel.Start(); err != nil {
+			return err
+		}
+
+		// send the msg from cluster handler and shim.
+		go e.sendMessageToParent()
+
+		// handle the msg from cluster handler.
+		go e.sendMessageToTunnel()
 	}
 
-	go e.sendMessageToTunnel()
+	// single cluster's rootcc should handle msg from rootcm.
+	if e.rootClusterEnable {
+		go func() {
+			for {
+				msg := <-e.conf.RootClusterToEdgeChan
+				e.handleMessage(msg)
+			}
+		}()
+	}
+
+	go e.handleRespFromShimClient()
+
 	return nil
+}
+
+// sendMessageToParent has multi tasks for reading the message from sendToParentChan,
+// and sending the message to parent cluster.
+func (e *edgeHandler) sendMessageToParent() {
+	for {
+		data := <-sendToParentChan
+		e.edgeTunnel.Send(data)
+	}
 }
 
 func (e *edgeHandler) sendMessageToTunnel() {
 	for {
 		msg := <-e.conf.ClusterToEdgeChan
-		data, err := proto.Marshal(&msg)
-		if err != nil {
-			continue
-		}
-		go e.edgeTunnel.Send(data)
+
+		e.sendToParent(&msg)
 	}
 }
 
@@ -211,8 +252,19 @@ func (e *edgeHandler) handleRespFromShimClient() {
 		resp := <-respChan
 
 		resp.Head.ClusterName = e.conf.ClusterName
-		// send to cloudtunnel.
-		e.sendToParent(resp)
+
+		if e.rootClusterEnable {
+			// send to clusterhandler
+			select {
+			case e.conf.RootEdgeToClusterChan <- resp:
+				klog.V(5).Info("send report msg to cluster handler success")
+			case <-time.After(sendToClusterHandlerTimeout):
+				klog.V(5).Info("send report msg to cluster handler timeout")
+			}
+		} else {
+			// send to cloudtunnel.
+			e.sendToParent(resp)
+		}
 	}
 	klog.Warningf("async return channel from shim client closed")
 }
@@ -261,7 +313,12 @@ func (e *edgeHandler) sendToParent(msg *clustermessage.ClusterMessage) error {
 		return err
 	}
 
-	go e.edgeTunnel.Send(data)
+	select {
+	case sendToParentChan <- data:
+		klog.V(5).Info("send msg to parent success")
+	case <-time.After(sendToParentTimeout):
+		klog.V(5).Info("send msg to parent timeout")
+	}
 
 	return nil
 }

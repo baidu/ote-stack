@@ -117,22 +117,30 @@ type EventResourceStatus struct {
 	FullList []*corev1.Event `json:"fullList"`
 }
 
-// ReporterContext defines the context object for reporter.
-type ReporterContext struct {
-	// InformerFactory gives access to informers for the reporter.
-	InformerFactory informers.SharedInformerFactory
+// BaseReporterContext defines base information of a reporter.
+type BaseReporterContext struct {
 	// ClusterName gets the cluster name.
 	ClusterName func() string
 	// SyncChan is used for synchronizing status of the edge cluster.
 	SyncChan chan clustermessage.ClusterMessage
 	// StopChan is the stop channel.
-	StopChan <-chan struct{}
+	StopChan chan struct{}
+}
+
+// ReporterContext defines the context object for k8s reporter.
+type ReporterContext struct {
+	BaseReporterContext
+	// InformerFactory gives access to informers for the reporter.
+	InformerFactory informers.SharedInformerFactory
 	// KubeClient is the kubernetes client interface for the reporter to use.
 	KubeClient kubernetes.Interface
 }
 
 // InitFunc is used to launch a particular reporter.
 type InitFunc func(ctx *ReporterContext) error
+
+// BaseInitFunc is used to launch a particular reporter.
+type BaseInitFunc func(ctx *BaseReporterContext) error
 
 // NewReporterInitializers returns a public map of named reporter groups paired to their InitFunc.
 func NewReporterInitializers() map[string]InitFunc {
@@ -151,14 +159,10 @@ func NewReporterInitializers() map[string]InitFunc {
 	return reporters
 }
 
-// IsValid returns the ReporterContext validation result.
-func (ctx *ReporterContext) IsValid() bool {
+// IsValid returns the base validation result.
+func (ctx *BaseReporterContext) IsValid() bool {
 	if ctx == nil {
 		klog.Errorf("Failed to create new reporter, ctx is nil")
-		return false
-	}
-	if ctx.InformerFactory == nil {
-		klog.Errorf("Failed to create new reporter, InformerFactory is nil")
 		return false
 	}
 	if ctx.SyncChan == nil {
@@ -169,13 +173,34 @@ func (ctx *ReporterContext) IsValid() bool {
 		klog.Errorf("Failed to create new reporter, StopChan is nil")
 		return false
 	}
+	return true
+}
+
+// IsValid returns the ReporterContext validation result.
+func (ctx *ReporterContext) IsValid() bool {
+	if ctx == nil {
+		klog.Errorf("Failed to create new reporter, ctx is nil")
+		return false
+	}
+	if !ctx.BaseReporterContext.IsValid() {
+		return false
+	}
+	if ctx.InformerFactory == nil {
+		klog.Errorf("Failed to create new reporter, InformerFactory is nil")
+		return false
+	}
 
 	return true
 }
 
 // ToClusterMessage packs the Report infomation into clustermessage.
 func (r Reports) ToClusterMessage(clusterName string) (*clustermessage.ClusterMessage, error) {
-	body, err := json.Marshal(r)
+	return ToClusterMessage(clusterName, r)
+}
+
+// ToClusterMessage packs the obj into clustermessage.
+func ToClusterMessage(clusterName string, obj interface{}) (*clustermessage.ClusterMessage, error) {
+	body, err := json.Marshal(obj)
 	if err != nil {
 		return nil, err
 	}

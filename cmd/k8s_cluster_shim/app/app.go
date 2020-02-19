@@ -101,17 +101,38 @@ func Run() error {
 	defer cancel()
 
 	reporterContext := &reporter.ReporterContext{
-		InformerFactory: informers.NewSharedInformerFactory(k8sClient, informerDuration),
-		ClusterName:     s.ClusterName,
-		SyncChan:        s.SendChan(),
-		StopChan:        ctx.Done(),
-		KubeClient:      k8sClient,
+		BaseReporterContext: reporter.BaseReporterContext{
+			ClusterName: s.ClusterName,
+			SyncChan:    s.SendChan(),
+		},
+		KubeClient: k8sClient,
 	}
 
-	err = startReporters(reporterContext)
-	if err != nil {
-		klog.Fatalf("start reporters failed: %v", err)
-	}
+	go func() {
+		for {
+			// if cc is connected to shim, starts to report resource,
+			// and if cc is disconnected, stops to report resource.
+			select {
+			case isConnected := <-s.ConnectStatusChan():
+				if isConnected {
+					reporterContext.InformerFactory = informers.NewSharedInformerFactory(k8sClient, informerDuration)
+					reporterContext.StopChan = make(chan struct{})
+
+					err := startReporters(reporterContext)
+					if err != nil {
+						klog.Fatalf("start reporters failed: %v", err)
+					}
+
+					klog.Info("start informer")
+				} else {
+					stopReporters(reporterContext)
+				}
+			case <-ctx.Done():
+				stopReporters(reporterContext)
+				break
+			}
+		}
+	}()
 
 	go func() {
 		<-signals
@@ -126,6 +147,7 @@ func Run() error {
 	return nil
 }
 
+// startReporters starts to reporting resource.
 func startReporters(ctx *reporter.ReporterContext) error {
 	reporters := reporter.NewReporterInitializers()
 	for reporterName, initFn := range reporters {
@@ -139,4 +161,26 @@ func startReporters(ctx *reporter.ReporterContext) error {
 	}
 	ctx.InformerFactory.Start(ctx.StopChan)
 	return nil
+}
+
+// stopReporters stops reporting resource.
+func stopReporters(ctx *reporter.ReporterContext) {
+	if ctx.StopChan != nil && !isChanClose(ctx.StopChan) {
+		close(ctx.StopChan)
+	}
+
+	ctx.InformerFactory = nil
+
+	klog.Info("stop informer")
+}
+
+// isChanClose check if channel is close.
+func isChanClose(ch chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+	}
+
+	return false
 }

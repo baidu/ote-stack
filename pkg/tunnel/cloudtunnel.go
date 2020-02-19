@@ -172,7 +172,7 @@ func (t *cloudTunnel) handleReceiveMessage(client *WSClient) {
 			klog.Errorf("wsclient %s read msg error, err:%s", client.Name, err.Error())
 			break
 		}
-		go t.receiveMessageHandler(client.Name, msg)
+		t.receiveMessageHandler(client.Name, msg)
 	}
 }
 
