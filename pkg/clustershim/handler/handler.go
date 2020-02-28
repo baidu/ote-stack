@@ -18,12 +18,17 @@ limitations under the License.
 package handler
 
 import (
+	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"k8s.io/klog"
-	
+
 	"github.com/baidu/ote-stack/pkg/clustermessage"
+)
+
+var (
+	ShimNewResponse = sync.NewCond(&sync.Mutex{})
 )
 
 // Handler is shim handler interface that contains
@@ -35,9 +40,10 @@ type Handler interface {
 
 // Response packages the body message to clustermessage.ClusterMessage.
 func Response(body []byte, head *clustermessage.MessageHead) *clustermessage.ClusterMessage {
+	ShimNewResponse.Broadcast()
 	msg := &clustermessage.ClusterMessage{
-		Head:	head,
-		Body:	body,
+		Head: head,
+		Body: body,
 	}
 	return msg
 }
@@ -56,7 +62,7 @@ func ControlTaskResponse(status int, body string) []byte {
 		klog.Errorf("marshal ControllerTaskResponse failed: %v", err)
 		return nil
 	}
-	return resp 
+	return resp
 }
 
 func GetControllerTaskFromClusterMessage(
