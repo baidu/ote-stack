@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/websocket"
@@ -34,7 +35,9 @@ import (
 )
 
 const (
-	shimRespChanLen = 10000
+	shimRespChanLen            = 10000
+	shimConnectedRetryTime     = 60
+	shimConnectedRetryDuration = 1 * time.Second
 )
 
 // ShimServiceClient is the client interface to a cluster shim.
@@ -48,8 +51,10 @@ type localShimClient struct {
 }
 
 type remoteShimClient struct {
-	client   *tunnel.WSClient
-	respChan chan *clustermessage.ClusterMessage
+	shimAddr       string
+	shimClientName string
+	client         *tunnel.WSClient
+	respChan       chan *clustermessage.ClusterMessage
 }
 
 // ShimHandler is a handler map of a shim server.
@@ -136,25 +141,36 @@ func (s *localShimClient) ReturnChan() <-chan *clustermessage.ClusterMessage {
 
 // NewRemoteShimClient returns a remote shim client which is connecting to addr.
 func NewRemoteShimClient(shimClientName, addr string) ShimServiceClient {
-	u := url.URL{
-		Scheme: "ws",
-		Host:   addr,
-		Path:   fmt.Sprintf("/%s/%s", shimServerPathForClusterController, shimClientName),
+	var err error
+
+	ret := &remoteShimClient{
+		shimAddr:       addr,
+		shimClientName: shimClientName,
+		respChan:       make(chan *clustermessage.ClusterMessage, shimRespChanLen),
 	}
-	header := http.Header{}
-	conn, resp, err := websocket.DefaultDialer.Dial(u.String(), header)
-	if err != nil {
-		if resp != nil {
-			klog.Errorf("failed to connect to remote shim, code=%v", resp.StatusCode)
+
+	for i := 0; i < shimConnectedRetryTime; i++ {
+		if err = ret.connect(); err == nil {
+			break
 		}
-		klog.Errorf("failed to connect to remote shim: %v", err)
+		time.Sleep(shimConnectedRetryDuration)
+	}
+
+	if err != nil {
+		klog.Errorf("cc connects to shim server failed: %v", err)
 		return nil
 	}
-	ret := &remoteShimClient{
-		client:   tunnel.NewWSClient(shimClientName, conn),
-		respChan: make(chan *clustermessage.ClusterMessage, shimRespChanLen),
-	}
-	go ret.handleReceiveMessage()
+
+	go func() {
+		for {
+			ret.handleReceiveMessage()
+			klog.Errorf("cc disconnects to shim server")
+
+			ret.client.Close()
+			ret.reconnect()
+		}
+	}()
+
 	return ret
 }
 
@@ -191,5 +207,38 @@ func (s *remoteShimClient) handleReceiveMessage() {
 			continue
 		}
 		s.respChan <- resp
+	}
+}
+
+func (s *remoteShimClient) connect() error {
+	u := url.URL{
+		Scheme: "ws",
+		Host:   s.shimAddr,
+		Path:   fmt.Sprintf("/%s/%s", shimServerPathForClusterController, s.shimClientName),
+	}
+
+	header := http.Header{}
+	conn, resp, err := websocket.DefaultDialer.Dial(u.String(), header)
+	if err != nil {
+		if resp != nil {
+			return fmt.Errorf("failed to connect to remote shim, code=%v", resp.StatusCode)
+		}
+		return fmt.Errorf("failed to connect to remote shim: %v", err)
+	}
+
+	s.client = tunnel.NewWSClient(s.shimClientName, conn)
+
+	return nil
+}
+
+func (s *remoteShimClient) reconnect() {
+	for {
+		if err := s.connect(); err != nil {
+			time.Sleep(shimConnectedRetryDuration)
+			continue
+		}
+
+		klog.Info("shim reconnect success")
+		break
 	}
 }
