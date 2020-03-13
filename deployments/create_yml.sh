@@ -6,6 +6,7 @@ set -u
 set -e
 
 WORK_DIR=$(dirname $(readlink -f $0))
+arch=$(uname -m)
 
 function echo_error {
     [ $# -eq 0 ] && return
@@ -34,6 +35,7 @@ function create_yml_and_replace_harbor {
     [ $# -ne 1 ] && echo_error "create_yml_and_replace_harbor lack args" && exit 1
     file=$1
     file_tpl=${file}.tpl
+    [ -f $file_tpl.$arch ] && file_tpl=${file}.tpl.$arch
     cp $file_tpl $file -f
     sed -i "s!_HARBOR_SECRET_NAME_!$harbor_secret_name!g" $file
     sed -i "s!_HARBOR_IMAGE_ADDR_!$harbor_image_addr!g" $file
@@ -92,6 +94,7 @@ function start {
     log_server_ip=$(kubectl get node -o wide -l log=deploy | grep -w Ready | head -1 | awk '{print $6}')
     elasticsearch_host_ip=$log_server_ip
     sed -i "s!_ELASTICSEARCH_HOST_IP_!$elasticsearch_host_ip!g" $file
+    sed -i "s!_DOCKER_ROOT_DIR_!$docker_root_dir!g" $file
 
     file=$WORK_DIR/elasticsearch/elasticsearch.yml
     create_yml_and_replace_harbor $file

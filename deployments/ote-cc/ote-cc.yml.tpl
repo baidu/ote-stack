@@ -21,7 +21,6 @@ spec:
       - name: ote-cc
         image: _HARBOR_IMAGE_ADDR_/ote-cc:2.1
         imagePullPolicy: IfNotPresent
-        command: ["/usr/local/src/clustercontroller"]
         args:
         - "--kube-config=/kube/config"
         - "--remote-shim-endpoint=ote-k8s-shim:8262"

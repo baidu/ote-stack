@@ -8,91 +8,19 @@ metadata:
   annotations:
     service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 spec:
-  clusterIP: None
   selector:
     app: ote-mysql
   ports:
   - port: 8306
     name: ote-mysql
-    targetPort: 8306
+    targetPort: 3306
 ---
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: db-sql2
   namespace: kube-system
 data:
-  entrypoint.sh: |
-    #!/bin/bash
-    # Taken from the official mysql-repo
-    # And changed for simplification of course :)
-    # I.e. DATADIR is always /var/lib/mysql
-    # We don't force the usage of MYSQL_ALLOW_EMPTY_PASSWORD
-    # erkan.yanar@linsenraum.de
-    set -e
-    set -x
-    # Check ENV (MYSQL_) and stop if they are not known variables
-    # TODO
-
-
-    tempSqlFile='/tmp/mysql-first-time.sql'
-    MYSQL_ROOT_PASSWORD=123456
-    if [ ! -d "/var/lib/mysql/mysql" ]; then
-
-       echo 'Running mysql_install_db ...'
-       mysql_install_db --datadir=/var/lib/mysql
-       echo 'Finished mysql_install_db'
-
-       # These statements _must_ be on individual lines, and _must_ end with
-       # semicolons (no line breaks or comments are permitted).
-       # TODO proper SQL escaping on ALL the things D:
-       cat /home/db.sql >> "$tempSqlFile"
-
-       cat >> "$tempSqlFile" <<-EOSQL
-    -- What's done in this file shouldn't be replicated
-    --  or products like mysql-fabric won't work
-    SET @@SESSION.SQL_LOG_BIN=0;
-
-    DELETE FROM mysql.user ;
-    CREATE USER 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' ;
-    GRANT ALL ON *.* TO 'root'@'%' WITH GRANT OPTION ;
-    DROP DATABASE IF EXISTS test ;
-    EOSQL
-
-
-        if [ "$MYSQL_DATABASE" ]; then
-            echo "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\` ;" >> "$tempSqlFile"
-        fi
-
-        if [ "$MYSQL_USER" -a "$MYSQL_PASSWORD" ]; then
-            echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" >> "$tempSqlFile"
-            echo "CREATE USER '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD' ;" >> "$tempSqlFile"
-        fi
-        if [ "$MYSQL_USER" -a ! "$MYSQL_PASSWORD" ]; then
-            echo "CREATE USER '$MYSQL_USER'@'%'  ;"         >> "$tempSqlFile"
-            echo "CREATE USER '$MYSQL_USER'@'localhost'  ;" >> "$tempSqlFile"
-        fi
-
-        if [ "$MYSQL_USER" -a  "$MYSQL_DATABASE"  ]; then
-            echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" >> "$tempSqlFile"
-            echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'localhost' ;" >> "$tempSqlFile"
-        fi
-
-        echo 'FLUSH PRIVILEGES ;' >> "$tempSqlFile"
-        set -- "$@" --init-file="$tempSqlFile"
-        sed -i "s/skip-grant-tables/#skip-grant-tables/g" /etc/mysql/my-galera.cnf
-    fi
-    echo 'port=8306' >> /etc/mysql/my-galera.cnf
-    echo @a
-    set -- mysqld "$@"
-    chown -R mysql:mysql /var/lib/mysql
-    chown -R mysql:mysql /var/run/mysqld
-    echo "Checking to upgrade the schema"
-    echo "A failed upgrade is ok when there was no upgrade"
-    # mysql_upgrade || true
-    exec "$@"
-
   db.sql: |
     CREATE DATABASE sys_ote_manage_platform;
     USE sys_ote_manage_platform;
@@ -321,18 +249,18 @@ data:
       UNIQUE KEY(`instance`, `alert_name`,`create_time`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci  COMMENT = '告警信息表';
 ---
-
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
+  labels:
+    app: ote-mysql
   name: ote-mysql
   namespace: kube-system
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: ote-mysql
-  serviceName: ote-mysql
-  replicas: 1
   template:
     metadata:
       labels:
@@ -340,71 +268,17 @@ spec:
     spec:
       imagePullSecrets:
       - name: _HARBOR_SECRET_NAME_
-      initContainers:
-      - name: install
-        image:  _HARBOR_IMAGE_ADDR_/galera-install:0.1
-        imagePullPolicy: IfNotPresent
-        args:
-        - "--work-dir=/work-dir"
-        volumeMounts:
-        - name: workdir
-          mountPath: "/work-dir"
-        - name: config
-          mountPath: "/etc/mysql"
-      - name: bootstrap
-        image:  _HARBOR_IMAGE_ADDR_/debian:jessie
-        imagePullPolicy: IfNotPresent
-        command:
-        - "/work-dir/peer-finder"
-        args:
-        - -on-start="/work-dir/on-start.sh"
-        - "-service=ote-mysql"
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: workdir
-          mountPath: "/work-dir"
-        - name: config
-          mountPath: "/etc/mysql"
-      affinity:
-        # nodeAffinity:
-        #   requiredDuringSchedulingIgnoredDuringExecution:
-        #     nodeSelectorTerms:
-        #     - matchExpressions:
-        #       - key: idc
-        #         operator: In
-        #         values:
-        #         - ote
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - ote-mysql
-            topologyKey: "kubernetes.io/hostname"
       containers:
-      - name: mysql
-        image:  _HARBOR_IMAGE_ADDR_/mysql-galera:e2e
+      # mysql-galera is not supported on aarch64 now. Run mysql with one instance.
+      - image: _HARBOR_IMAGE_ADDR_/mysql:5.5
+        name: mysql
         imagePullPolicy: IfNotPresent
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "123456"
         ports:
-        - containerPort: 8306
+        - containerPort: 3306
           name: mysql
-        - containerPort: 4444
-          name: sst
-        - containerPort: 4567
-          name: replication
-        - containerPort: 4568
-          name: ist
-        command:
-        - /home/entrypoint.sh
-        - --defaults-file=/etc/mysql/my-galera.cnf
-        - --user=root
         readinessProbe:
           # TODO: If docker exec is buggy just use gcr.io/google_containers/mysql-healthz:1.0
           exec:
@@ -417,11 +291,11 @@ spec:
           successThreshold: 2
         volumeMounts:
         - name: datadir
-          mountPath: /var/lib/
+          mountPath: /var/lib/mysql
         - name: config
-          mountPath: /etc/mysql
+          mountPath: /etc/mysql/conf.d/
         - name: db-sql2
-          mountPath: /home
+          mountPath: /docker-entrypoint-initdb.d
       volumes:
       - name: config
         emptyDir: {}

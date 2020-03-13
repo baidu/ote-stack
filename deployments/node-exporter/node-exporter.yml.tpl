@@ -20,7 +20,8 @@ spec:
       - name: _HARBOR_SECRET_NAME_
       containers:
       - name: node-exporter
-        image: _HARBOR_IMAGE_ADDR_/node-exporter:v0.18.0 
+        # use prom/node-exporter:v0.18.1 image instead of v0.18.0 while v0.18.0 is not supported on aarch64
+        image: _HARBOR_IMAGE_ADDR_/node-exporter:v0.18.1
         imagePullPolicy: IfNotPresent
         args:
         - "--web.listen-address=0.0.0.0:9100"

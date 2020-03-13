@@ -41,6 +41,7 @@ spec:
         - "--service-cluster-ip-range=10.254.0.0/12"
         - "--insecure-bind-address=0.0.0.0"
         - "--insecure-port=9082"
+        - "--secure-port=9083"
         - "--advertise-address=_KUBE_APISERVER_HOST_IP_"
         - "--logtostderr=true"
         - "--v=2"

@@ -71,8 +71,8 @@ spec:
       - name: _HARBOR_SECRET_NAME_
       initContainers:
       - name: init-mysql
-        image: _HARBOR_IMAGE_ADDR_/busyboxplus:latest
-        command: ['sh', '-c', 'until curl ote-mysql:8306; do echo waiting for mysql; sleep 2; done;']
+        image: _HARBOR_IMAGE_ADDR_/busybox:latest
+        command: ['sh', '-c', 'until nc -zv -w 1 ote-mysql 8306; do echo waiting for mysql; sleep 2; done;']
       containers:
       - name: open-api
         image: _HARBOR_IMAGE_ADDR_/open-api-go:0.1.5.8

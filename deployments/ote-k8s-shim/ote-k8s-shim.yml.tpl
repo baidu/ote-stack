@@ -21,7 +21,6 @@ spec:
       - name: ote-k8s-shim
         image: _HARBOR_IMAGE_ADDR_/ote-shim:2.1
         imagePullPolicy: IfNotPresent
-        command: ["/usr/local/src/k8s_cluster_shim"]
         args:
         - "--kube-config=/kube/config"
         - "--helm-addr=tiller-proxy:80"

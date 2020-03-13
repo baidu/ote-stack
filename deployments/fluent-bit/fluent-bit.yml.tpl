@@ -156,14 +156,15 @@ spec:
       hostNetwork: true
       containers:
       - name: fluent-bit
-        image: _HARBOR_IMAGE_ADDR_/fluent-bit:1.2.2
+        # use fluent/fluent-bit:1.3 image instead of fluent-bit:1.2.2 while 1.2.2 is not supported on aarch64
+        image: _HARBOR_IMAGE_ADDR_/fluent-bit:1.3
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - name: varlog
           mountPath: /var/log
           readOnly: true
         - name: homedockerdatacontainers
-          mountPath: /home/docker/data/containers
+          mountPath: _DOCKER_ROOT_DIR_/containers
           readOnly: true
         - name: fluent-bit-config-es
           mountPath: /fluent-bit/etc/
@@ -175,7 +176,7 @@ spec:
           path: /var/log
       - name: homedockerdatacontainers
         hostPath:
-          path: /home/docker/data/containers
+          path: _DOCKER_ROOT_DIR_/containers
       - name: fluent-bit-config-es
         configMap:
           name: fluent-bit-config-es
