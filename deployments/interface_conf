@@ -20,3 +20,6 @@ harbor_api_addr=http://1.2.3.4:8702
 harbor_admin_user=admin
 harbor_admin_passwd=123456
 repository_domain=ote-harbor.baidu.com
+
+# docker root dir
+docker_root_dir=/var/lib/docker

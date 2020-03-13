@@ -22,6 +22,7 @@ function echo_info {
 
 function start {
     # 1) monitor/alarm
+    kubectl create namespace monitor
     kubectl apply -f gpu-metrics-exporter/gpu-metrics-exporter.yml
     kubectl apply -f node-exporter/node-exporter.yml
     kubectl apply -f node-agent/node-agent.yml
@@ -93,6 +94,7 @@ function stop {
     kubectl delete -f mysql/mysql.yml
     kubectl delete -f open-api/open-api.yml
     kubectl delete -f web-frontend-nginx/web-frontend-nginx.yml
+    kubectl delete namespace monitor
     echo_info "kubectl delete all yml success..."
 }
 

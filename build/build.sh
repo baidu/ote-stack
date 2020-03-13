@@ -4,6 +4,7 @@ export LANG="en_US.UTF-8"
 WORKROOT="$(cd $(dirname "$0") && cd ../ && pwd || false)"
 export GO111MODULE=on
 export GOPROXY=https://goproxy.io
+export CGO_ENABLED=0
 cd $WORKROOT
 
 function build() {
@@ -18,12 +19,34 @@ function build() {
     if [ $? -ne 0 ]; then
         exit 1
     fi
+    
     # build clustercontroller and cluster shim
     go build -o $OUTPUT_BIN/clustercontroller ./cmd/clustercontroller && \
         go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim && \
         go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim && \
         go build -o $OUTPUT_BIN/ote_controller_manager ./cmd/ote_controller_manager && \
         echo "build done"
+}
+
+function build_image() {
+    arch=$(uname -m)
+    if [[ $arch == "x86_64" ]];then
+       arch="amd64"
+    elif [[ $arch == "aarch64" ]];then
+       arch="arm64"
+    else 
+       arch="386"
+    fi
+
+    export GOOS=linux
+    export GOARCH=$arch
+    build
+
+    cd $OUTPUT_BIN/
+    docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-cc -t ote-cc:latest .
+    docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-cm -t ote-cm:latest .
+    docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-shim -t ote-shim:latest .
+    echo "build image done"
 }
 
 function test() {
@@ -50,6 +73,9 @@ shift
 case "${cmd}" in
     build)
         build
+        ;;
+    build-image)
+        build_image
         ;;
     test)
         test

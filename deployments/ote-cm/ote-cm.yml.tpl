@@ -48,7 +48,6 @@ spec:
       - name: ote-cm
         image: _HARBOR_IMAGE_ADDR_/ote-cm:2.1
         imagePullPolicy: IfNotPresent
-        command: ["/usr/local/src/ote_controller_manager"]
         args:
         - "--kube-config=/kube/config"
         - "--root-cluster-controller=ote-cc:8287"
