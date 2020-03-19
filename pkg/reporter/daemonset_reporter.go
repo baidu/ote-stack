@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -75,6 +76,10 @@ func (dr *DaemonsetReporter) handleDaemonset(obj interface{}) {
 
 	addLabelToResource(&daemonset.ObjectMeta, dr.ctx)
 
+	if dr.ctx.IsLightweightReport {
+		daemonset = dr.lightWeightDaemonset(daemonset)
+	}
+
 	// generates unique key for daemonset.
 	key, err := cache.MetaNamespaceKeyFunc(daemonset)
 	if err != nil {
@@ -101,6 +106,10 @@ func (dr *DaemonsetReporter) deleteDaemonset(obj interface{}) {
 	klog.V(3).Infof("Daemonset: %s deleted.", daemonset.Name)
 
 	addLabelToResource(&daemonset.ObjectMeta, dr.ctx)
+
+	if dr.ctx.IsLightweightReport {
+		daemonset = dr.lightWeightDaemonset(daemonset)
+	}
 
 	// generates unique key for daemonset.
 	key, err := cache.MetaNamespaceKeyFunc(daemonset)
@@ -150,4 +159,27 @@ func (ds *DaemonsetResourceStatus) serializeMapToReporters() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightDaemonset crops the content of the daemonset
+func (dr *DaemonsetReporter) lightWeightDaemonset(daemonset *appsv1.DaemonSet) *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{
+		TypeMeta: daemonset.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      daemonset.Name,
+			Namespace: daemonset.Namespace,
+			Labels:    daemonset.Labels,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: daemonset.Spec.Selector,
+			Template: daemonset.Spec.Template,
+		},
+		Status: appsv1.DaemonSetStatus{
+			CurrentNumberScheduled: daemonset.Status.CurrentNumberScheduled,
+			DesiredNumberScheduled: daemonset.Status.DesiredNumberScheduled,
+			NumberReady:            daemonset.Status.NumberReady,
+			UpdatedNumberScheduled: daemonset.Status.UpdatedNumberScheduled,
+			NumberAvailable:        daemonset.Status.NumberAvailable,
+		},
+	}
 }

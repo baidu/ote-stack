@@ -125,6 +125,8 @@ type BaseReporterContext struct {
 	SyncChan chan clustermessage.ClusterMessage
 	// StopChan is the stop channel.
 	StopChan chan struct{}
+	// IsLightweightReport is the switch for lightweight reporting sources.
+	IsLightweightReport bool
 }
 
 // ReporterContext defines the context object for k8s reporter.

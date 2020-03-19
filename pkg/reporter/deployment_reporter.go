@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -75,6 +76,10 @@ func (dr *DeploymentReporter) handleDeployment(obj interface{}) {
 
 	addLabelToResource(&deployment.ObjectMeta, dr.ctx)
 
+	if dr.ctx.IsLightweightReport {
+		deployment = dr.lightWeightDeployment(deployment)
+	}
+
 	// generates unique key for deployment.
 	key, err := cache.MetaNamespaceKeyFunc(deployment)
 	if err != nil {
@@ -101,6 +106,10 @@ func (dr *DeploymentReporter) deleteDeployment(obj interface{}) {
 	klog.V(3).Infof("Deployment: %s deleted.", deployment.Name)
 
 	addLabelToResource(&deployment.ObjectMeta, dr.ctx)
+
+	if dr.ctx.IsLightweightReport {
+		deployment = dr.lightWeightDeployment(deployment)
+	}
 
 	// generates unique key for deployment.
 	key, err := cache.MetaNamespaceKeyFunc(deployment)
@@ -150,4 +159,26 @@ func (ds *DeploymentResourceStatus) serializeMapToReporters() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightDeployment crops the content of the deployment
+func (dr *DeploymentReporter) lightWeightDeployment(deployment *appsv1.Deployment) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		TypeMeta: deployment.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+			Labels:    deployment.Labels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: deployment.Spec.Template,
+			Selector: deployment.Spec.Selector,
+			Replicas: deployment.Spec.Replicas,
+		},
+		Status: appsv1.DeploymentStatus{
+			Replicas:          deployment.Status.Replicas,
+			UpdatedReplicas:   deployment.Status.UpdatedReplicas,
+			AvailableReplicas: deployment.Status.AvailableReplicas,
+		},
+	}
 }

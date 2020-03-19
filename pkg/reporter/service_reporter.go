@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -73,6 +74,10 @@ func (sr *ServiceReporter) handleService(obj interface{}) {
 
 	addLabelToResource(&service.ObjectMeta, sr.ctx)
 
+	if sr.ctx.IsLightweightReport {
+		service = sr.lightWeightService(service)
+	}
+
 	// generates unique key for service.
 	key, err := cache.MetaNamespaceKeyFunc(service)
 	if err != nil {
@@ -99,6 +104,10 @@ func (sr *ServiceReporter) deleteService(obj interface{}) {
 	klog.V(3).Infof("Service: %s deleted.", service.Name)
 
 	addLabelToResource(&service.ObjectMeta, sr.ctx)
+
+	if sr.ctx.IsLightweightReport {
+		service = sr.lightWeightService(service)
+	}
 
 	// generates unique key for service.
 	key, err := cache.MetaNamespaceKeyFunc(service)
@@ -148,4 +157,20 @@ func (sr *ServiceResourceStatus) serializeMapToReporters() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightService crops the content of the service
+func (sr *ServiceReporter) lightWeightService(service *corev1.Service) *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: service.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      service.Name,
+			Namespace: service.Namespace,
+			Labels:    service.Labels,
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: service.Spec.ClusterIP,
+			Ports:     service.Spec.Ports,
+		},
+	}
 }

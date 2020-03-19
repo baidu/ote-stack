@@ -22,6 +22,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
@@ -183,6 +184,10 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
+	if pr.ctx.IsLightweightReport {
+		pod = pr.lightWeightPod(pod)
+	}
+
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {
 		klog.Errorf("Failed to get map key: %s", err)
@@ -212,6 +217,10 @@ func (pr *PodReporter) deletePod(obj interface{}) {
 
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
+	if pr.ctx.IsLightweightReport {
+		pod = pr.lightWeightPod(pod)
+	}
+
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {
 		klog.Errorf("Failed to get map key: %v", err)
@@ -219,4 +228,26 @@ func (pr *PodReporter) deletePod(obj interface{}) {
 	}
 
 	pr.SetDelMap(key, pod)
+}
+
+// lightWeightPod crops the content of the pod
+func (pr *PodReporter) lightWeightPod(pod *corev1.Pod) *corev1.Pod {
+	return &corev1.Pod{
+		TypeMeta: pod.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			Labels:    pod.Labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers:  pod.Spec.Containers,
+			NodeName:    pod.Spec.NodeName,
+			Volumes:     pod.Spec.Volumes,
+			Tolerations: pod.Spec.Tolerations,
+		},
+		Status: corev1.PodStatus{
+			Phase:             pod.Status.Phase,
+			ContainerStatuses: pod.Status.ContainerStatuses,
+		},
+	}
 }

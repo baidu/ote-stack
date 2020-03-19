@@ -55,8 +55,9 @@ func (f *fixtureNode) newNodeReporter() *NodeReporter {
 			ClusterName: func() string {
 				return clusterName
 			},
-			SyncChan: make(chan clustermessage.ClusterMessage),
-			StopChan: make(chan struct{}),
+			SyncChan:            make(chan clustermessage.ClusterMessage),
+			StopChan:            make(chan struct{}),
+			IsLightweightReport: true,
 		},
 		InformerFactory: k8sI,
 	}

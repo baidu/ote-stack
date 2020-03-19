@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -84,6 +85,10 @@ func (nr *NodeReporter) handleNode(obj interface{}) {
 
 	addLabelToResource(&node.ObjectMeta, nr.ctx)
 
+	if nr.ctx.IsLightweightReport {
+		node = nr.lightWeightNode(node)
+	}
+
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {
 		klog.Errorf("Failed to get map key: %s", err)
@@ -110,6 +115,10 @@ func (nr *NodeReporter) deleteNode(obj interface{}) {
 	}
 
 	addLabelToResource(&node.ObjectMeta, nr.ctx)
+
+	if nr.ctx.IsLightweightReport {
+		node = nr.lightWeightNode(node)
+	}
 
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {
@@ -159,4 +168,19 @@ func (rs *NodeResourceStatus) serializeMapToReports() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightNode crops the content of the node
+func (nr *NodeReporter) lightWeightNode(node *corev1.Node) *corev1.Node {
+	return &corev1.Node{
+		TypeMeta: node.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      node.Name,
+			Namespace: node.Namespace,
+			Labels:    node.Labels,
+		},
+		Status: corev1.NodeStatus{
+			Conditions: node.Status.Conditions,
+		},
+	}
 }
