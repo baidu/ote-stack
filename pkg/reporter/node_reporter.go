@@ -61,6 +61,8 @@ func newNodeReporter(ctx *ReporterContext) (*NodeReporter, error) {
 		DeleteFunc: nodeReporter.deleteNode,
 	})
 
+	go nodeReporter.reportFullListNode(ctx)
+
 	return nodeReporter, nil
 }
 
@@ -183,4 +185,20 @@ func (nr *NodeReporter) lightWeightNode(node *corev1.Node) *corev1.Node {
 			Conditions: node.Status.Conditions,
 		},
 	}
+}
+
+// reportFullListNode report all node list when starts node reporter.
+func (nr *NodeReporter) reportFullListNode(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Nodes().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	nodeList := ctx.InformerFactory.Core().V1().Nodes().Informer().GetIndexer().ListKeys()
+
+	nodeMap := &NodeResourceStatus{
+		FullList: nodeList,
+	}
+
+	go nr.sendToSyncChan(nodeMap)
 }

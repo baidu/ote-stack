@@ -60,6 +60,8 @@ func startServiceReporter(ctx *ReporterContext) error {
 		DeleteFunc: serviceReporter.deleteService,
 	})
 
+	go serviceReporter.reportFullListService(ctx)
+
 	return nil
 }
 
@@ -173,4 +175,20 @@ func (sr *ServiceReporter) lightWeightService(service *corev1.Service) *corev1.S
 			Ports:     service.Spec.Ports,
 		},
 	}
+}
+
+// reportFullListService report all service list when starts service reporter.
+func (sr *ServiceReporter) reportFullListService(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Services().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	servieList := ctx.InformerFactory.Core().V1().Services().Informer().GetIndexer().ListKeys()
+
+	serviceMap := &ServiceResourceStatus{
+		FullList: servieList,
+	}
+
+	go sr.sendToSyncChan(serviceMap)
 }

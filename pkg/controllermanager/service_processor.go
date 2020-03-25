@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
@@ -30,7 +31,7 @@ import (
 )
 
 // handleServiceReport handles ServiceReport from edge clusters.
-func (u *UpstreamProcessor) handleServiceReport(b []byte) error {
+func (u *UpstreamProcessor) handleServiceReport(clusterName string, b []byte) error {
 	srs, err := ServiceReportStatusDeserialize(b)
 	if err != nil {
 		return fmt.Errorf("ServiceReportStatusDeserialize failed: %v", err)
@@ -38,7 +39,7 @@ func (u *UpstreamProcessor) handleServiceReport(b []byte) error {
 
 	//handle FullList
 	if srs.FullList != nil {
-		//TODO:handle full service resource.
+		u.handleServiceFullList(clusterName, srs.FullList)
 	}
 
 	//handle UpdateMap
@@ -52,6 +53,40 @@ func (u *UpstreamProcessor) handleServiceReport(b []byte) error {
 	}
 
 	return nil
+}
+
+// handleServiceFullList compares the center and edge service resources based on the reported full resources,
+// and deletes the centers's excess service
+func (u *UpstreamProcessor) handleServiceFullList(clusterName string, fullList []string) {
+	var edgeServiceList = make(map[string]struct{})
+
+	label := reporter.ClusterLabel + "=" + clusterName
+
+	for _, serviceKey := range fullList {
+		edgeServiceList[UniqueFullResourceName(serviceKey, clusterName)] = struct{}{}
+	}
+
+	serviceList, err := u.ctx.K8sClient.CoreV1().Services("").List(metav1.ListOptions{LabelSelector: label})
+	if err != nil {
+		klog.Errorf("get full list service from cm failed")
+		return
+	}
+
+	for _, service := range serviceList.Items {
+		// TODO Concurrent Processing Resource List
+		serviceKey, err := cache.MetaNamespaceKeyFunc(&service)
+		if err != nil {
+			klog.Errorf("get cm's service key failed")
+			continue
+		}
+
+		if _, ok := edgeServiceList[serviceKey]; !ok {
+			err := u.DeleteService(&service)
+			if err != nil {
+				klog.Errorf("service: %s deleted failed: %v", service.ObjectMeta.Name, err)
+			}
+		}
+	}
 }
 
 // handleServiceUpdateMap handles service resource created or updated event from edge clusters.

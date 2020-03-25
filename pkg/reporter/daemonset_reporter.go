@@ -62,6 +62,8 @@ func startDaemonsetReporter(ctx *ReporterContext) error {
 		DeleteFunc: daemonsetReporter.deleteDaemonset,
 	})
 
+	go daemonsetReporter.reportFullListDaemonset(ctx)
+
 	return nil
 }
 
@@ -182,4 +184,20 @@ func (dr *DaemonsetReporter) lightWeightDaemonset(daemonset *appsv1.DaemonSet) *
 			NumberAvailable:        daemonset.Status.NumberAvailable,
 		},
 	}
+}
+
+// reportFullListDaemonset report all daemonset list when starts daemonset reporter.
+func (dr *DaemonsetReporter) reportFullListDaemonset(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Apps().V1().DaemonSets().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	daemonsetList := ctx.InformerFactory.Apps().V1().DaemonSets().Informer().GetIndexer().ListKeys()
+
+	daemonsetMap := &DaemonsetResourceStatus{
+		FullList: daemonsetList,
+	}
+
+	go dr.sendToSyncChan(daemonsetMap)
 }

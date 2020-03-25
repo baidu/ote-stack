@@ -62,7 +62,7 @@ type PodResourceStatus struct {
 	// DelMap stores deleted resource obj.
 	DelMap map[string]*corev1.Pod `json:"delMap"`
 	// FullList stores full resource obj.
-	FullList []*corev1.Pod `json:"fullList"`
+	FullList []string `json:"fullList"`
 }
 
 // NodeResourceStatus defines node resource status.
@@ -72,7 +72,7 @@ type NodeResourceStatus struct {
 	// DelMap stores deleted resource obj.
 	DelMap map[string]*corev1.Node `json:"delMap"`
 	// FullList stores full resource obj.
-	FullList []*corev1.Node `json:"fullList"`
+	FullList []string `json:"fullList"`
 }
 
 //TODO: more resource structure definitions.
@@ -84,7 +84,7 @@ type DeploymentResourceStatus struct {
 	// DelMap stores deleted resource obj.
 	DelMap map[string]*appsv1.Deployment `json:"delMap"`
 	// FullList stores full resource obj.
-	FullList []*appsv1.Deployment `json:"fullList"`
+	FullList []string `json:"fullList"`
 }
 
 //DaemonsetResourceStatus defines daemonset resource status.
@@ -94,7 +94,7 @@ type DaemonsetResourceStatus struct {
 	// DelMap stores deleted resource obj.
 	DelMap map[string]*appsv1.DaemonSet `json:"delMap"`
 	// FullList stores full resource obj.
-	FullList []*appsv1.DaemonSet `json:"fullList"`
+	FullList []string `json:"fullList"`
 }
 
 //ServiceResourceStatus defines service resource status.
@@ -104,7 +104,7 @@ type ServiceResourceStatus struct {
 	// DelMap stores deleted resource obj.
 	DelMap map[string]*corev1.Service `json:"delMap"`
 	// FullList stores full resource obj.
-	FullList []*corev1.Service `json:"fullList"`
+	FullList []string `json:"fullList"`
 }
 
 //EventResourceStatus defines event resource status.

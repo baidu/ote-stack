@@ -36,6 +36,7 @@ import (
 
 var (
 	daemonsetGroup = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}
+	daemonsetKind  = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "DaemonSet"}
 )
 
 func newDaemonSetGetAction(name string) kubetesting.GetActionImpl {
@@ -54,6 +55,10 @@ func newDaemonSetDeleteAction(name string) kubetesting.DeleteActionImpl {
 	return kubetesting.NewDeleteAction(daemonsetGroup, "", name)
 }
 
+func newDaemonSetListAction(ops metav1.ListOptions) kubetesting.ListActionImpl {
+	return kubetesting.NewListAction(daemonsetGroup, daemonsetKind, "", ops)
+}
+
 func NewDaemonset(name string,
 	clusterLabel string, edgeVersion string, resourceVersion string) *appsv1.DaemonSet {
 	daemonset := &appsv1.DaemonSet{
@@ -69,32 +74,27 @@ func NewDaemonset(name string,
 
 func TestHandleDaemonsetReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
+	u.ctx.K8sClient = &kubernetes.Clientset{}
 
 	daemonsetUpdateMap := &reporter.DaemonsetResourceStatus{
 		UpdateMap: make(map[string]*appsv1.DaemonSet),
 		DelMap:    make(map[string]*appsv1.DaemonSet),
+		FullList:  make([]string, 1),
 	}
 
 	daemonset := NewDaemonset("test-name1", "cluster1", "", "1")
 
 	daemonsetUpdateMap.UpdateMap["test-namespace1/test-name1"] = daemonset
 	daemonsetUpdateMap.DelMap["test-namespace1/test-name2"] = daemonset
+	daemonsetUpdateMap.FullList = []string{"ds1"}
 
 	daemonsetJson, err := json.Marshal(daemonsetUpdateMap)
 	assert.Nil(t, err)
 
-	daemonsetReport := reporter.Report{
-		ResourceType: reporter.ResourceTypeDaemonset,
-		Body:         daemonsetJson,
-	}
-
-	reportJson, err := json.Marshal(daemonsetReport)
+	err = u.handleDaemonsetReport("cluster1", daemonsetJson)
 	assert.Nil(t, err)
 
-	err = u.handleDaemonsetReport(reportJson)
-	assert.Nil(t, err)
-
-	err = u.handleDaemonsetReport([]byte{1})
+	err = u.handleDaemonsetReport("cluster1", []byte{1})
 	assert.NotNil(t, err)
 }
 
@@ -235,5 +235,70 @@ func TestDeleteDaemonset(t *testing.T) {
 				assert.Equal(test.expectActions, mockClient.Actions())
 			}
 		})
+	}
+}
+
+func TestHandleDaemonsetFullList(t *testing.T) {
+	fullList := []string{"ds1"}
+
+	ops := metav1.ListOptions{
+		LabelSelector: "ote-cluster=c1",
+	}
+
+	cmDaemonsetList := &appsv1.DaemonSetList{}
+	daemonset := NewDaemonset("ds1-c1", "c1", "", "")
+	cmDaemonsetList.Items = append(cmDaemonsetList.Items, *daemonset)
+
+	cmDaemonsetList2 := &appsv1.DaemonSetList{}
+	daemonset = NewDaemonset("ds2-c1", "c1", "", "")
+	cmDaemonsetList2.Items = append(cmDaemonsetList2.Items, *daemonset)
+
+	tests := []struct {
+		name              string
+		clusterName       string
+		edgeDaemonsetList []string
+		daemonsetList     *appsv1.DaemonSetList
+		expectActions     []kubetesting.Action
+		expectErr         bool
+	}{
+		{
+			name:              "success to handle full list's daemonset",
+			clusterName:       "c1",
+			edgeDaemonsetList: fullList,
+			daemonsetList:     cmDaemonsetList,
+			expectActions: []kubetesting.Action{
+				newDaemonSetListAction(ops),
+			},
+			expectErr: false,
+		},
+		{
+			name:              "A error occurs when handles a full list daemonset",
+			clusterName:       "c1",
+			edgeDaemonsetList: fullList,
+			daemonsetList:     cmDaemonsetList2,
+			expectActions: []kubetesting.Action{
+				newDaemonSetListAction(ops),
+				newDaemonSetDeleteAction("ds2"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		mockClient := &kubernetes.Clientset{}
+		mockClient.AddReactor("list", "daemonsets", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			return true, test.daemonsetList, nil
+		})
+
+		u := NewUpstreamProcessor(&K8sContext{})
+		u.ctx.K8sClient = mockClient
+
+		u.handleDaemonsetFullList(test.clusterName, test.edgeDaemonsetList)
+
+		if test.expectErr {
+			assert.NotEqual(t, test.expectActions, mockClient.Actions())
+		} else {
+			assert.Equal(t, test.expectActions, mockClient.Actions())
+		}
 	}
 }

@@ -47,6 +47,36 @@ var (
 	addToScheme = localSchemeBuilder.AddToScheme
 )
 
+func getFailProcessResourceMessage(resourceType int, t *testing.T) []byte {
+	reportData := []reporter.Report{
+		{
+			ResourceType: resourceType,
+			Body:         []byte{1, 2},
+		},
+	}
+
+	body, err := json.Marshal(reportData)
+	if err != nil {
+		t.Errorf("json marshal report data failed")
+		return nil
+	}
+
+	msg := &clustermessage.ClusterMessage{
+		Head: &clustermessage.MessageHead{
+			Command: clustermessage.CommandType_EdgeReport,
+		},
+		Body: body,
+	}
+
+	data, err := msg.Serialize()
+	if err != nil {
+		t.Errorf("msg serialized failed")
+		return nil
+	}
+
+	return data
+}
+
 func TestHandleReceivedMessage(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
 	// get msg failed
@@ -116,6 +146,31 @@ func TestHandleReceivedMessage(t *testing.T) {
 	u.ctx.K8sClient = mockClient
 	err = u.HandleReceivedMessage("", data)
 	assert.Nil(t, err)
+
+	// process pod reporter failed
+	data = getFailProcessResourceMessage(reporter.ResourceTypePod, t)
+	err = u.HandleReceivedMessage("", data)
+	assert.NotNil(t, err)
+
+	// process node reporter failed
+	data = getFailProcessResourceMessage(reporter.ResourceTypeNode, t)
+	err = u.HandleReceivedMessage("", data)
+	assert.NotNil(t, err)
+
+	// process service reporter failed
+	data = getFailProcessResourceMessage(reporter.ResourceTypeService, t)
+	err = u.HandleReceivedMessage("", data)
+	assert.NotNil(t, err)
+
+	// process deployment reporter failed
+	data = getFailProcessResourceMessage(reporter.ResourceTypeDeployment, t)
+	err = u.HandleReceivedMessage("", data)
+	assert.NotNil(t, err)
+
+	// process daemonset reporter failed
+	data = getFailProcessResourceMessage(reporter.ResourceTypeDaemonset, t)
+	err = u.HandleReceivedMessage("", data)
+	assert.NotNil(t, err)
 }
 
 func init() {

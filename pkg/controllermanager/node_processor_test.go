@@ -36,6 +36,7 @@ import (
 
 var (
 	nodeGroup = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
+	nodeKind  = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
 )
 
 func newNodeUpdateAction(node *corev1.Node) kubetesting.UpdateActionImpl {
@@ -54,12 +55,18 @@ func newNodeDeleteAction(name string) kubetesting.DeleteActionImpl {
 	return kubetesting.NewDeleteAction(nodeGroup, "", name)
 }
 
+func newNodeListAction(ops metav1.ListOptions) kubetesting.ListActionImpl {
+	return kubetesting.NewListAction(nodeGroup, nodeKind, "", ops)
+}
+
 func TestHandleNodeReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
+	u.ctx.K8sClient = &kubernetes.Clientset{}
 
 	nodeUpdatesMap := &reporter.NodeResourceStatus{
 		UpdateMap: make(map[string]*corev1.Node),
 		DelMap:    make(map[string]*corev1.Node),
+		FullList:  make([]string, 1),
 	}
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -73,22 +80,15 @@ func TestHandleNodeReport(t *testing.T) {
 	}
 	nodeUpdatesMap.UpdateMap["test-namespace1/test-name1"] = node
 	nodeUpdatesMap.DelMap["test-namespace1/test-name2"] = node
+	nodeUpdatesMap.FullList = []string{"node1"}
 
 	nodeUpdatesMapJSON, err := json.Marshal(nodeUpdatesMap)
 	assert.Nil(t, err)
 
-	reportData := reporter.Report{
-		ResourceType: reporter.ResourceTypeNode,
-		Body:         nodeUpdatesMapJSON,
-	}
-
-	nodeReportJSON, err := json.Marshal(reportData)
+	err = u.handleNodeReport("cluster1", nodeUpdatesMapJSON)
 	assert.Nil(t, err)
 
-	err = u.handleNodeReport(nodeReportJSON)
-	assert.Nil(t, err)
-
-	err = u.handleNodeReport([]byte{1, 2, 3})
+	err = u.handleNodeReport("cluster1", []byte{1, 2, 3})
 	assert.Error(t, err)
 }
 
@@ -305,5 +305,80 @@ func TestDeleteNode(t *testing.T) {
 				assert.Equal(test.expectActions, mockClient.Actions())
 			}
 		})
+	}
+}
+
+func TestHandleNodeFullList(t *testing.T) {
+	fullList := []string{"node1"}
+
+	ops := metav1.ListOptions{
+		LabelSelector: "ote-cluster=c1",
+	}
+
+	cmNodeList := &corev1.NodeList{}
+	node := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node1-c1",
+			Labels: map[string]string{reporter.ClusterLabel: "c1"},
+		},
+	}
+	cmNodeList.Items = append(cmNodeList.Items, node)
+
+	cmNodeList2 := &corev1.NodeList{}
+	node = corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node2-c1",
+			Labels: map[string]string{reporter.ClusterLabel: "c1"},
+		},
+	}
+	cmNodeList2.Items = append(cmNodeList2.Items, node)
+
+	tests := []struct {
+		name          string
+		clusterName   string
+		edgeNodeList  []string
+		nodeList      *corev1.NodeList
+		expectActions []kubetesting.Action
+		expectErr     bool
+	}{
+		{
+			name:         "success to handle full list's node",
+			clusterName:  "c1",
+			edgeNodeList: fullList,
+			nodeList:     cmNodeList,
+			expectActions: []kubetesting.Action{
+				newNodeListAction(ops),
+			},
+			expectErr: false,
+		},
+		{
+			name:         "A error occurs when handles a full list node",
+			clusterName:  "c1",
+			edgeNodeList: fullList,
+			nodeList:     cmNodeList2,
+			expectActions: []kubetesting.Action{
+				newNodeListAction(ops),
+				newNodeDeleteAction("node2"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		mockClient := &kubernetes.Clientset{}
+		mockClient.AddReactor("list", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			return true, test.nodeList, nil
+		})
+
+		u := NewUpstreamProcessor(&K8sContext{})
+		u.ctx.K8sClient = mockClient
+
+		u.handleNodeFullList(test.clusterName, test.edgeNodeList)
+
+		if test.expectErr {
+			assert.NotEqual(t, test.expectActions, mockClient.Actions())
+		} else {
+			assert.Equal(t, test.expectActions, mockClient.Actions())
+		}
 	}
 }

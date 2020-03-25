@@ -36,6 +36,7 @@ import (
 
 var (
 	deploymentGroup = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	deploymentKind  = schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
 )
 
 func newDeploymentGetAction(name string) kubetesting.GetActionImpl {
@@ -54,6 +55,10 @@ func newDeploymentDeleteAction(name string) kubetesting.DeleteActionImpl {
 	return kubetesting.NewDeleteAction(deploymentGroup, "", name)
 }
 
+func newDeploymentListAction(ops metav1.ListOptions) kubetesting.ListActionImpl {
+	return kubetesting.NewListAction(deploymentGroup, deploymentKind, "", ops)
+}
+
 func NewDeployment(name string,
 	clusterLabel string, edgeVersion string, resourceVersion string) *appsv1.Deployment {
 	deployment := &appsv1.Deployment{
@@ -69,32 +74,27 @@ func NewDeployment(name string,
 
 func TestHandleDeploymentReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
+	u.ctx.K8sClient = &kubernetes.Clientset{}
 
 	deploymentUpdateMap := &reporter.DeploymentResourceStatus{
 		UpdateMap: make(map[string]*appsv1.Deployment),
 		DelMap:    make(map[string]*appsv1.Deployment),
+		FullList:  make([]string, 1),
 	}
 
 	deployment := NewDeployment("test-name1", "cluster1", "", "1")
 
 	deploymentUpdateMap.UpdateMap["test-namespace1/test-name1"] = deployment
 	deploymentUpdateMap.DelMap["test-namespace1/test-name2"] = deployment
+	deploymentUpdateMap.FullList = []string{"dp1"}
 
 	deploymentJson, err := json.Marshal(deploymentUpdateMap)
 	assert.Nil(t, err)
 
-	deploymentReport := reporter.Report{
-		ResourceType: reporter.ResourceTypeDeployment,
-		Body:         deploymentJson,
-	}
-
-	reportJson, err := json.Marshal(deploymentReport)
+	err = u.handleDeploymentReport("cluster1", deploymentJson)
 	assert.Nil(t, err)
 
-	err = u.handleDeploymentReport(reportJson)
-	assert.Nil(t, err)
-
-	err = u.handleDeploymentReport([]byte{1})
+	err = u.handleDeploymentReport("cluster1", []byte{1})
 	assert.NotNil(t, err)
 }
 
@@ -235,5 +235,70 @@ func TestDeleteDeployment(t *testing.T) {
 				assert.Equal(test.expectActions, mockClient.Actions())
 			}
 		})
+	}
+}
+
+func TestHandleDeploymentFullList(t *testing.T) {
+	fullList := []string{"dp1"}
+
+	ops := metav1.ListOptions{
+		LabelSelector: "ote-cluster=c1",
+	}
+
+	cmDeploymentList := &appsv1.DeploymentList{}
+	deployment := NewDeployment("dp1-c1", "c1", "", "")
+	cmDeploymentList.Items = append(cmDeploymentList.Items, *deployment)
+
+	cmDeploymentList2 := &appsv1.DeploymentList{}
+	deployment = NewDeployment("dp2-c1", "c1", "", "")
+	cmDeploymentList2.Items = append(cmDeploymentList2.Items, *deployment)
+
+	tests := []struct {
+		name               string
+		clusterName        string
+		edgeDeploymentList []string
+		deploymentList     *appsv1.DeploymentList
+		expectActions      []kubetesting.Action
+		expectErr          bool
+	}{
+		{
+			name:               "success to handle full list's deployment",
+			clusterName:        "c1",
+			edgeDeploymentList: fullList,
+			deploymentList:     cmDeploymentList,
+			expectActions: []kubetesting.Action{
+				newDeploymentListAction(ops),
+			},
+			expectErr: false,
+		},
+		{
+			name:               "A error occurs when handles a full list deployment",
+			clusterName:        "c1",
+			edgeDeploymentList: fullList,
+			deploymentList:     cmDeploymentList2,
+			expectActions: []kubetesting.Action{
+				newDeploymentListAction(ops),
+				newDeploymentDeleteAction("dp2"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		mockClient := &kubernetes.Clientset{}
+		mockClient.AddReactor("list", "deployments", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			return true, test.deploymentList, nil
+		})
+
+		u := NewUpstreamProcessor(&K8sContext{})
+		u.ctx.K8sClient = mockClient
+
+		u.handleDeploymentFullList(test.clusterName, test.edgeDeploymentList)
+
+		if test.expectErr {
+			assert.NotEqual(t, test.expectActions, mockClient.Actions())
+		} else {
+			assert.Equal(t, test.expectActions, mockClient.Actions())
+		}
 	}
 }

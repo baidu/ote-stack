@@ -94,11 +94,11 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 	for _, report := range reports {
 		switch report.ResourceType {
 		case reporter.ResourceTypePod:
-			if err = u.handlePodReport(report.Body); err != nil {
+			if err = u.handlePodReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handlePodReport failed: %v", err)
 			}
 		case reporter.ResourceTypeNode:
-			if err = u.handleNodeReport(report.Body); err != nil {
+			if err = u.handleNodeReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handleNodeReport failed: %v", err)
 			}
 		case reporter.ResourceTypeClusterStatus:
@@ -106,15 +106,15 @@ func (u *UpstreamProcessor) processEdgeReport(msg *clustermessage.ClusterMessage
 				klog.Errorf("handleClusterStatusReport failed: %v", err)
 			}
 		case reporter.ResourceTypeDeployment:
-			if err = u.handleDeploymentReport(report.Body); err != nil {
+			if err = u.handleDeploymentReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handleDeploymentReport failed: %v", err)
 			}
 		case reporter.ResourceTypeDaemonset:
-			if err = u.handleDaemonsetReport(report.Body); err != nil {
+			if err = u.handleDaemonsetReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handleDaemonsetReport failed: %v", err)
 			}
 		case reporter.ResourceTypeService:
-			if err = u.handleServiceReport(report.Body); err != nil {
+			if err = u.handleServiceReport(msg.Head.ClusterName, report.Body); err != nil {
 				klog.Errorf("handleServiceReport failed: %v", err)
 			}
 		case reporter.ResourceTypeEvent:
@@ -189,4 +189,9 @@ func adaptToCentralResource(reportResource *metav1.ObjectMeta, storedResource *m
 
 	// The resource from edge cluster should have the same uid of the one stored in etcd.
 	reportResource.UID = storedResource.UID
+}
+
+// UniqueFullResourceName returns unique resource name.
+func UniqueFullResourceName(name string, clusterName string) string {
+	return name + UniqueResourceNameSeparator + clusterName
 }

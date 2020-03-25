@@ -23,13 +23,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
-func (u *UpstreamProcessor) handleNodeReport(b []byte) error {
+func (u *UpstreamProcessor) handleNodeReport(clusterName string, b []byte) error {
 	// Deserialize byte data to NodeReportStatus
 	nrs, err := NodeReportStatusDeserialize(b)
 	if err != nil {
@@ -37,7 +38,7 @@ func (u *UpstreamProcessor) handleNodeReport(b []byte) error {
 	}
 	// handle FullList
 	if nrs.FullList != nil {
-		// TODO:handle full node resource.
+		u.handleNodeFullList(clusterName, nrs.FullList)
 	}
 	// handle UpdateMap
 	if nrs.UpdateMap != nil {
@@ -49,6 +50,40 @@ func (u *UpstreamProcessor) handleNodeReport(b []byte) error {
 	}
 
 	return nil
+}
+
+// handleNodeFullList compares the center and edge node resources based on the reported full resources,
+// and deletes the centers's excess nodes
+func (u *UpstreamProcessor) handleNodeFullList(clusterName string, fullList []string) {
+	var edgeNodeList = make(map[string]struct{})
+
+	label := reporter.ClusterLabel + "=" + clusterName
+
+	for _, nodeKey := range fullList {
+		edgeNodeList[UniqueFullResourceName(nodeKey, clusterName)] = struct{}{}
+	}
+
+	nodeList, err := u.ctx.K8sClient.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: label})
+	if err != nil {
+		klog.Errorf("get full list node from cm failed")
+		return
+	}
+
+	for _, node := range nodeList.Items {
+		// TODO Concurrent Processing Resource List
+		nodeKey, err := cache.MetaNamespaceKeyFunc(&node)
+		if err != nil {
+			klog.Errorf("get cm's node key failed")
+			continue
+		}
+
+		if _, ok := edgeNodeList[nodeKey]; !ok {
+			err := u.DeleteNode(&node)
+			if err != nil {
+				klog.Errorf("node: %s deleted failed: %v", node.ObjectMeta.Name, err)
+			}
+		}
+	}
 }
 
 func (u *UpstreamProcessor) handleNodeDelMap(delMap map[string]*corev1.Node) {

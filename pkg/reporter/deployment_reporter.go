@@ -62,6 +62,8 @@ func startDeploymentReporter(ctx *ReporterContext) error {
 		DeleteFunc: deploymentReporter.deleteDeployment,
 	})
 
+	go deploymentReporter.reportFullListDeployment(ctx)
+
 	return nil
 }
 
@@ -181,4 +183,20 @@ func (dr *DeploymentReporter) lightWeightDeployment(deployment *appsv1.Deploymen
 			AvailableReplicas: deployment.Status.AvailableReplicas,
 		},
 	}
+}
+
+// reportFullListDeployment report all deployment list when starts deployment reporter.
+func (dr *DeploymentReporter) reportFullListDeployment(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Apps().V1().Deployments().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	deploymentList := ctx.InformerFactory.Apps().V1().Deployments().Informer().GetIndexer().ListKeys()
+
+	deploymentMap := &DeploymentResourceStatus{
+		FullList: deploymentList,
+	}
+
+	go dr.sendToSyncChan(deploymentMap)
 }

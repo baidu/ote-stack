@@ -56,6 +56,7 @@ func newPodReporter(ctx *ReporterContext) (*PodReporter, error) {
 		updatedPodsMap: &PodResourceStatus{
 			UpdateMap: make(map[string]*corev1.Pod),
 			DelMap:    make(map[string]*corev1.Pod),
+			FullList:  make([]string, 0),
 		},
 		updatedPodsRWMutex: &sync.RWMutex{},
 		SyncChan:           ctx.SyncChan,
@@ -75,6 +76,8 @@ func newPodReporter(ctx *ReporterContext) (*PodReporter, error) {
 		},
 		DeleteFunc: podReporter.deletePod,
 	})
+
+	go podReporter.reportFullListPod(ctx)
 
 	return podReporter, nil
 }
@@ -96,8 +99,8 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	pr.updatedPodsRWMutex.Lock()
 	defer pr.updatedPodsRWMutex.Unlock()
 
-	// check map length, empty UpdateMap and DelMap don't need to send pod reports
-	if len(pr.updatedPodsMap.UpdateMap) == 0 && len(pr.updatedPodsMap.DelMap) == 0 {
+	// check map length, empty UpdateMap, DelMap and FullList don't need to send pod reports
+	if len(pr.updatedPodsMap.UpdateMap) == 0 && len(pr.updatedPodsMap.DelMap) == 0 && len(pr.updatedPodsMap.FullList) == 0 {
 		return
 	}
 
@@ -138,6 +141,7 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	// clean up the map
 	pr.updatedPodsMap.DelMap = make(map[string]*corev1.Pod)
 	pr.updatedPodsMap.UpdateMap = make(map[string]*corev1.Pod)
+	pr.updatedPodsMap.FullList = make([]string, 0)
 }
 
 // SetUpdateMap adds pod objects to UpdateMap.
@@ -157,6 +161,13 @@ func (pr *PodReporter) SetDelMap(name string, pod *corev1.Pod) {
 		delete(pr.updatedPodsMap.UpdateMap, name)
 	}
 	pr.updatedPodsMap.DelMap[name] = pod
+}
+
+func (pr *PodReporter) SetFullListMap(podList []string) {
+	pr.updatedPodsRWMutex.Lock()
+	defer pr.updatedPodsRWMutex.Unlock()
+
+	pr.updatedPodsMap.FullList = podList
 }
 
 func startPodReporter(ctx *ReporterContext) error {
@@ -250,4 +261,16 @@ func (pr *PodReporter) lightWeightPod(pod *corev1.Pod) *corev1.Pod {
 			ContainerStatuses: pod.Status.ContainerStatuses,
 		},
 	}
+}
+
+// reportFullListPod report all pods list when starts pod reporter.
+func (pr *PodReporter) reportFullListPod(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Pods().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	podList := ctx.InformerFactory.Core().V1().Pods().Informer().GetIndexer().ListKeys()
+
+	pr.SetFullListMap(podList)
 }
