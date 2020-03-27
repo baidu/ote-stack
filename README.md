@@ -15,6 +15,8 @@ Through the standard interface, hierarchical clusters can be built quickly. The 
 
 ### Support third cluster
 It supports [kubernetes](https://github.com/kubernetes/) and [k3s](https://github.com/rancher/k3s) now. Because edge is a logical cluster，it can support any clusters by cluster-shim in theory. So in 5G era, it can be compatible with different implementations of different operators'MEC platforms.
+Use k8s cluster shim for both k8s and k3s when WebFrontend is used. k3s cluster shim is a lightweight version of k8s cluster shim without edge resource reporter.
+For better k3s support, we commit a [pull request](https://github.com/rancher/k3s/pull/1553) to make flannel config template, and offer a way to support [GPU with k3s](.docs/gpu-for-k3s.md).
 
 ### Lightweight cluster controller 
 Only one component and one customize shim can make the third cluster controlled by OTE-Stack. So it's very light and easy to use.
@@ -30,9 +32,13 @@ Through Cluster Controller, all the clusters can be integrated into the unified 
 
 ### Support multi-runtimes
 OTE-Stack leverages [virtlet](https://github.com/Mirantis/virtlet) for VM-based workloads, and also adds VM operation(start，stop, mount，etc.) via CustomResourceDefinition. So it supports VM，Kata containers and runc which can orchestrate in a unified way.
+Also, [kubevirt](https://github.com/kubevirt/kubevirt) can be used to manage VMs inside edge cluster with better support for GPU. WebFrontend of OTE-Stack would support VM operations in future work.
 
 ### Kubernetes native support
 With OTE-Stack, users can orchestrate dockers/VM on Edge clusters just like a traditional kubernetes cluster in the Cloud.
+
+### Support multi-arch
+OTE-Stack can run on both x86 and arm architecture. All components of OTE-Stack has been tested on arm except GPU support. Images are avalible on [docker hub](https://hub.docker.com/u/otestack).
 
 ## Architecture
 [![architecture](./docs/images/architecture.png)](./docs/images/architecture.png)
@@ -93,7 +99,9 @@ OTE-Stack features a pluggable architecture, making it much easier to build on.
 * Accurate routing of messages between clusters
 
 ## Getting Started
-[Quick Start](./docs/quickstart.md)
+[Quick Start](./docs/install-scripts.md)
+
+[Build from source](./docs/quickstart.md)
 
 ## TODO
 OTE-Stack aims to providing a complete solution to edge cloud, so we will gradually open and improve the following core functions in the future.
