@@ -182,7 +182,11 @@ func (nr *NodeReporter) lightWeightNode(node *corev1.Node) *corev1.Node {
 			Labels:    node.Labels,
 		},
 		Status: corev1.NodeStatus{
-			Conditions: node.Status.Conditions,
+			Conditions:  node.Status.Conditions,
+			NodeInfo:    node.Status.NodeInfo,
+			Addresses:   node.Status.Addresses,
+			Capacity:    node.Status.Capacity,
+			Allocatable: node.Status.Allocatable,
 		},
 	}
 }
