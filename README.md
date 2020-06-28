@@ -40,6 +40,9 @@ With OTE-Stack, users can orchestrate dockers/VM on Edge clusters just like a tr
 ### Support multi-arch
 OTE-Stack can run on both x86 and arm architecture. All components of OTE-Stack has been tested on arm except GPU support. Images are avalible on [docker hub](https://hub.docker.com/u/otestack).
 
+### Support edge autonomy
+OTE-Stack has the autonomy of edge nodes and supports edge autonomy of k8s and k3s clusters.
+
 ## Architecture
 [![architecture](./docs/images/architecture.png)](./docs/images/architecture.png)
 
@@ -50,6 +53,14 @@ OTE-Stack features a pluggable architecture, making it much easier to build on.
 * Through k8s-cluster-shim to achieve the management of kubernetes cluster, shielding the native implementation within the kubernetes cluster;
 * According to the interface of OTE-Stack, the cluster shim of the third party cluster can be realized to access and schedule the third party cluster. The internal implementation of the third party cluster is shielded;
 * Each layer can be used as a control entry to control all sub-clusters below this layer. Users can also use kubectl or API to implement custom cluster management and scheduling.
+
+[![architecture](./docs/images/edge-autonomy.png)](./docs/images/edge-autonomy.png)
+
+On the edge, OTE-Stack provides the ability to support node autonomy within the cluster.
+* Use EdgeHub to take over the kubelet, kube-proxy or k3s agent components of the node.
+* EdgeHub provides load balancing capabilities for node requests.
+* During node autonomy, you can use EdgeController instead of node to complete node status reporting and updating.
+* EdgeHub and EdgeController have both the autonomy capabilities of k8s and k3s clusters. 
 
 ### Components
  * WebFrontend
@@ -88,6 +99,10 @@ OTE-Stack features a pluggable architecture, making it much easier to build on.
  > Exposing Prometheus data as APIs to OpenAPI and Scheduler
  * **VMController**
  > Operations for a single VM, such as start, stop, etc. 
+ * **EdgeHub**
+ > Proxy between master and node in the edge cluster.
+ * **EdgeController**
+ > It is used to take over the state management of the node when the node is disconnected from the master. 
 
 ## Current Features
 * Hierarchical cluster management
@@ -102,6 +117,8 @@ OTE-Stack features a pluggable architecture, making it much easier to build on.
 [Quick Start](./docs/install-scripts.md)
 
 [Build from source](./docs/quickstart.md)
+
+[Use for edge autonomy](./docs/edge-autonomy.md)
 
 ## TODO
 OTE-Stack aims to providing a complete solution to edge cloud, so we will gradually open and improve the following core functions in the future.

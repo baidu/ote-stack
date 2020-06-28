@@ -36,6 +36,10 @@ func (c *FakeOteV1) ClusterControllers(namespace string) v1.ClusterControllerInt
 	return &FakeClusterControllers{c, namespace}
 }
 
+func (c *FakeOteV1) EdgeNodes(namespace string) v1.EdgeNodeInterface {
+	return &FakeEdgeNodes{c, namespace}
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeOteV1) RESTClient() rest.Interface {

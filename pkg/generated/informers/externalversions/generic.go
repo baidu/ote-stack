@@ -57,6 +57,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ote().V1().Clusters().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("clustercontrollers"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ote().V1().ClusterControllers().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("edgenodes"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ote().V1().EdgeNodes().Informer()}, nil
 
 	}
 

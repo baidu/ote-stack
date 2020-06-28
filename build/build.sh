@@ -25,6 +25,8 @@ function build() {
         go build -o $OUTPUT_BIN/k8s_cluster_shim ./cmd/k8s_cluster_shim && \
         go build -o $OUTPUT_BIN/k3s_cluster_shim ./cmd/k3s_cluster_shim && \
         go build -o $OUTPUT_BIN/ote_controller_manager ./cmd/ote_controller_manager && \
+        go build -o $OUTPUT_BIN/ote_edgehub ./cmd/edgehub && \
+        go build -o $OUTPUT_BIN/ote_edgecontroller ./cmd/edgecontroller && \
         echo "build done"
 }
 
@@ -46,6 +48,7 @@ function build_image() {
     docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-cc -t ote-cc:latest .
     docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-cm -t ote-cm:latest .
     docker build -f $WORKROOT/build/dockerfile/Dockerfile.ote-shim -t ote-shim:latest .
+    docker build -f $WORKROOT/build/dockerfile/Dockerfile.edge-controller -t edge-controller:latest .
     echo "build image done"
 }
 

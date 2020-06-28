@@ -114,6 +114,8 @@ function start {
     create_yml_and_replace_harbor $file
     file=$WORK_DIR/kube-apiserver/ns.yml
     create_yml_and_replace_harbor $file
+    file=$WORK_DIR/kube-apiserver/edgenode-crd.yml
+    create_yml_and_replace_harbor $file
 
     file=$WORK_DIR/ote-cc/ote-cc.yml
     create_yml_and_replace_harbor $file
@@ -149,6 +151,15 @@ function start {
     sed -i "s!_WEB_FRONTEND_NGINX_ADDR_!$web_frontend_nginx_addr!g" $file
     sed -i "s!_REPOSITORY_DOMAIN_!$repository_domain!g" $file
 
+    file=$WORK_DIR/edge-controller/edge-controller.yml
+    create_yml_and_replace_harbor $file
+    k8s_svc_ip=$(kubectl get svc | grep -w kubernetes | head -1 | awk '{print $3}')
+    k8s_svc_port=$(kubectl get svc | grep -w kubernetes | head -1 | awk '{print $5}' | tr -cd "[0-9]")
+    new_ip="https://${k8s_svc_ip}:${k8s_svc_port}"
+    cp -f /root/.kube/config $WORK_DIR/edge-controller/kubeconfig
+    sed -i "s!https.*!$new_ip!" $WORK_DIR/edge-controller/kubeconfig
+    kubectl create secret generic kubeconfig --type=Opaque -n kube-system --from-file=kubeconfig=$WORK_DIR/edge-controller/kubeconfig
+
     echo_info "create YAML file success ..."
 }
 
@@ -160,6 +171,9 @@ function stop() {
     kubectl label node $node1_name monitor-
     kubectl label node $node2_name log-
     kubectl label node $node1_name cc-
+
+    # delete kubeconfig secret
+    kubectl delete secret -n kube-system kubeconfig
 
     echo_info "delete YAML file success ..."
 }

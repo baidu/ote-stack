@@ -33,3 +33,11 @@ type ClusterControllerListerExpansion interface{}
 // ClusterControllerNamespaceListerExpansion allows custom methods to be added to
 // ClusterControllerNamespaceLister.
 type ClusterControllerNamespaceListerExpansion interface{}
+
+// EdgeNodeListerExpansion allows custom methods to be added to
+// EdgeNodeLister.
+type EdgeNodeListerExpansion interface{}
+
+// EdgeNodeNamespaceListerExpansion allows custom methods to be added to
+// EdgeNodeNamespaceLister.
+type EdgeNodeNamespaceListerExpansion interface{}

@@ -48,6 +48,7 @@ function start {
 
     kubectl apply -f kube-apiserver/ns.yml -s $kube_apiserver_host_ip:$kube_apiserver_port
     kubectl apply -f kube-apiserver/cc-crd.yml -s $kube_apiserver_host_ip:$kube_apiserver_port
+    kubectl apply -f kube-apiserver/edgenode-crd.yml
     kubectl apply -f tiller/tiller.yml
     kubectl apply -f tiller-proxy/tiller-proxy.yml
     kubectl create configmap edge-kube-config -n kube-system --from-file=/root/.kube/config
@@ -61,6 +62,7 @@ function start {
     kubectl apply -f mysql/mysql.yml
     kubectl apply -f open-api/open-api.yml
     kubectl apply -f web-frontend-nginx/web-frontend-nginx.yml
+    kubectl apply -f edge-controller/edge-controller.yml
 
     echo_info "kubectl apply all yml success..."
 }
@@ -94,6 +96,7 @@ function stop {
     kubectl delete -f mysql/mysql.yml
     kubectl delete -f open-api/open-api.yml
     kubectl delete -f web-frontend-nginx/web-frontend-nginx.yml
+    kubectl delete -f edge-controller/edge-controller.yml
     kubectl delete namespace monitor
     echo_info "kubectl delete all yml success..."
 }
