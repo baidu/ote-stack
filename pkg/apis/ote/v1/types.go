@@ -205,3 +205,22 @@ func (c *Cluster) WrapperToClusterController(dst string) (*ClusterController, er
 	}
 	return &cc, nil
 }
+
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// EdgeNode is the cloud resource to indicates the status of edge node.
+type EdgeNode struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Status            string `json:"status"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// EdgeNodeList is a list of EdgeNode.
+type EdgeNodeList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []EdgeNode `json:"items"`
+}

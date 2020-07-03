@@ -203,10 +203,13 @@ func TestShimClientDo(t *testing.T) {
 }
 
 func TestRemoteShimClient(t *testing.T) {
+	testServer := NewShimServer()
+	go testServer.Serve("")
+
 	shimclient := NewRemoteShimClient("testshim", ":9999")
 	assert.Nil(t, shimclient)
 
-	shimclient = NewRemoteShimClient("testshim", testShimServer.server.Addr)
+	shimclient = NewRemoteShimClient("testshim", testServer.server.Addr)
 	require.NotNil(t, shimclient)
 	c, ok := shimclient.(*remoteShimClient)
 	require.True(t, ok)
@@ -219,7 +222,7 @@ func TestRemoteShimClient(t *testing.T) {
 		Body: []byte("test body"),
 	}
 
-	sendChan := testShimServer.SendChan()
+	sendChan := testServer.SendChan()
 	sendChan <- expect
 	resp := <-shimclient.ReturnChan()
 	assert.Equal(t, expect.Body, resp.Body)
@@ -234,5 +237,6 @@ func TestRemoteShimClient(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, http.StatusNotFound, int(task.StatusCode))
 	c.client.Close()
+	testServer.Close()
 	time.Sleep(1 * time.Second)
 }

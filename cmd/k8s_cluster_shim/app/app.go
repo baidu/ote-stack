@@ -37,9 +37,10 @@ import (
 )
 
 var (
-	shimSock   string
-	kubeConfig string
-	helmConfig string
+	shimSock          string
+	kubeConfig        string
+	helmConfig        string
+	lightweightReport bool
 )
 
 const (
@@ -74,6 +75,7 @@ func NewK8sClusterShimCommand() *cobra.Command {
 		":8262", "Websocket address of ClusterShim")
 	cmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "k", "/root/.kube/config", "KubeConfig file path")
 	cmd.PersistentFlags().StringVarP(&helmConfig, "helm-addr", "", "", "Helm proxy address")
+	cmd.PersistentFlags().BoolVarP(&lightweightReport, "lightweight-report", "r", false, "Lightweight reporting resources")
 	fs := cmd.Flags()
 	fs.AddGoFlagSet(flag.CommandLine)
 
@@ -102,8 +104,9 @@ func Run() error {
 
 	reporterContext := &reporter.ReporterContext{
 		BaseReporterContext: reporter.BaseReporterContext{
-			ClusterName: s.ClusterName,
-			SyncChan:    s.SendChan(),
+			ClusterName:         s.ClusterName,
+			SyncChan:            s.SendChan(),
+			IsLightweightReport: lightweightReport,
 		},
 		KubeClient: k8sClient,
 	}

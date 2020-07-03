@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
@@ -30,7 +31,7 @@ import (
 )
 
 // handleDeploymentReport handles DeploymentReport from edge clusters.
-func (u *UpstreamProcessor) handleDeploymentReport(b []byte) error {
+func (u *UpstreamProcessor) handleDeploymentReport(clusterName string, b []byte) error {
 	drs, err := DeploymentReportStatusDeserialize(b)
 	if err != nil {
 		return fmt.Errorf("DeploymentReportStatusDeserialize failed: %v", err)
@@ -38,7 +39,7 @@ func (u *UpstreamProcessor) handleDeploymentReport(b []byte) error {
 
 	//handle FullList
 	if drs.FullList != nil {
-		//TODO:handle full deployment resource.
+		u.handleDeploymentFullList(clusterName, drs.FullList)
 	}
 
 	//handle UpdateMap
@@ -52,6 +53,40 @@ func (u *UpstreamProcessor) handleDeploymentReport(b []byte) error {
 	}
 
 	return nil
+}
+
+// handleDeploymentFullList compares the center and edge deployment resources based on the reported full resources,
+// and deletes the centers's excess deployments
+func (u *UpstreamProcessor) handleDeploymentFullList(clusterName string, fullList []string) {
+	var edgeDeploymentList = make(map[string]struct{})
+
+	label := reporter.ClusterLabel + "=" + clusterName
+
+	for _, deploymentKey := range fullList {
+		edgeDeploymentList[UniqueFullResourceName(deploymentKey, clusterName)] = struct{}{}
+	}
+
+	deploymentList, err := u.ctx.K8sClient.AppsV1().Deployments("").List(metav1.ListOptions{LabelSelector: label})
+	if err != nil {
+		klog.Errorf("get full list deployment from cm failed")
+		return
+	}
+
+	for _, deployment := range deploymentList.Items {
+		// TODO Concurrent Processing Resource List
+		deploymentKey, err := cache.MetaNamespaceKeyFunc(&deployment)
+		if err != nil {
+			klog.Errorf("get cm's deployment key failed")
+			continue
+		}
+
+		if _, ok := edgeDeploymentList[deploymentKey]; !ok {
+			err := u.DeleteDeployment(&deployment)
+			if err != nil {
+				klog.Errorf("deployment: %s deleted failed: %v", deployment.ObjectMeta.Name, err)
+			}
+		}
+	}
 }
 
 // handleDeploymentUpdateMap handles deployment resource created or updated event from edge clusters.

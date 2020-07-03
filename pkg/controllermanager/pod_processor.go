@@ -23,21 +23,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"github.com/baidu/ote-stack/pkg/reporter"
 )
 
-func (u *UpstreamProcessor) handlePodReport(b []byte) error {
+func (u *UpstreamProcessor) handlePodReport(clusterName string, b []byte) error {
 	// Deserialize byte data to PodReportStatus
 	prs, err := PodReportStatusDeserialize(b)
 	if err != nil {
 		return fmt.Errorf("PodReportStatusDeserialize failed : %v", err)
 	}
 	// handle FullList
-	if prs.FullList != nil {
-		// TODO:handle full pod resource.
+	if prs.FullList != nil && len(prs.FullList) != 0 {
+		u.handlePodFullList(clusterName, prs.FullList)
 	}
 	// handle UpdateMap
 	if prs.UpdateMap != nil {
@@ -49,6 +50,40 @@ func (u *UpstreamProcessor) handlePodReport(b []byte) error {
 	}
 
 	return nil
+}
+
+// handlePodFullList compares the center and edge pod resources based on the reported full resources,
+// and deletes the centers's excess pods
+func (u *UpstreamProcessor) handlePodFullList(clusterName string, fullList []string) {
+	var edgePodList = make(map[string]struct{})
+
+	label := reporter.ClusterLabel + "=" + clusterName
+
+	for _, podKey := range fullList {
+		edgePodList[UniqueFullResourceName(podKey, clusterName)] = struct{}{}
+	}
+
+	podList, err := u.ctx.K8sClient.CoreV1().Pods("").List(metav1.ListOptions{LabelSelector: label})
+	if err != nil {
+		klog.Errorf("get full list pod from cm failed")
+		return
+	}
+
+	for _, pod := range podList.Items {
+		// TODO Concurrent Processing Resource List
+		podKey, err := cache.MetaNamespaceKeyFunc(&pod)
+		if err != nil {
+			klog.Errorf("get cm's pod key failed")
+			continue
+		}
+
+		if _, ok := edgePodList[podKey]; !ok {
+			err := u.DeletePod(&pod)
+			if err != nil {
+				klog.Errorf("pod: %s deleted failed: %v", pod.ObjectMeta.Name, err)
+			}
+		}
+	}
 }
 
 func (u *UpstreamProcessor) handlePodDelMap(delMap map[string]*corev1.Pod) {

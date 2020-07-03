@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -60,6 +61,8 @@ func newNodeReporter(ctx *ReporterContext) (*NodeReporter, error) {
 		DeleteFunc: nodeReporter.deleteNode,
 	})
 
+	go nodeReporter.reportFullListNode(ctx)
+
 	return nodeReporter, nil
 }
 
@@ -83,6 +86,10 @@ func (nr *NodeReporter) handleNode(obj interface{}) {
 	}
 
 	addLabelToResource(&node.ObjectMeta, nr.ctx)
+
+	if nr.ctx.IsLightweightReport {
+		node = nr.lightWeightNode(node)
+	}
 
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {
@@ -110,6 +117,10 @@ func (nr *NodeReporter) deleteNode(obj interface{}) {
 	}
 
 	addLabelToResource(&node.ObjectMeta, nr.ctx)
+
+	if nr.ctx.IsLightweightReport {
+		node = nr.lightWeightNode(node)
+	}
 
 	key, err := cache.MetaNamespaceKeyFunc(node)
 	if err != nil {
@@ -159,4 +170,39 @@ func (rs *NodeResourceStatus) serializeMapToReports() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightNode crops the content of the node
+func (nr *NodeReporter) lightWeightNode(node *corev1.Node) *corev1.Node {
+	return &corev1.Node{
+		TypeMeta: node.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      node.Name,
+			Namespace: node.Namespace,
+			Labels:    node.Labels,
+		},
+		Status: corev1.NodeStatus{
+			Conditions:  node.Status.Conditions,
+			NodeInfo:    node.Status.NodeInfo,
+			Addresses:   node.Status.Addresses,
+			Capacity:    node.Status.Capacity,
+			Allocatable: node.Status.Allocatable,
+		},
+	}
+}
+
+// reportFullListNode report all node list when starts node reporter.
+func (nr *NodeReporter) reportFullListNode(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Nodes().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	nodeList := ctx.InformerFactory.Core().V1().Nodes().Informer().GetIndexer().ListKeys()
+
+	nodeMap := &NodeResourceStatus{
+		FullList: nodeList,
+	}
+
+	go nr.sendToSyncChan(nodeMap)
 }

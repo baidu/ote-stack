@@ -46,8 +46,9 @@ func (f *fixture) newReportContext() *ReporterContext {
 			ClusterName: func() string {
 				return clusterName
 			},
-			SyncChan: make(chan clustermessage.ClusterMessage, 1),
-			StopChan: make(chan struct{}),
+			SyncChan:            make(chan clustermessage.ClusterMessage, 1),
+			StopChan:            make(chan struct{}),
+			IsLightweightReport: true,
 		},
 		InformerFactory: k8sInformer,
 	}

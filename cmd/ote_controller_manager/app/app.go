@@ -160,6 +160,7 @@ func Run() error {
 		"kube-system",
 		oteControllerManagerName,
 		leK8sClient.CoreV1(),
+		leK8sClient.CoordinationV1(),
 		resourcelock.ResourceLockConfig{
 			Identity: id,
 			// add local event recorder for debug

@@ -38,8 +38,6 @@ var (
 	subtreeReportDuration       = 1 * time.Second
 	sendToParentTimeout         = 1 * time.Second
 	sendToParentChan            = make(chan []byte, 10000)
-	shimConnectedRetryTime      = 60
-	shimConnectedRetryDuration  = 1 * time.Second
 	sendToClusterHandlerTimeout = 1 * time.Second
 )
 
@@ -104,13 +102,7 @@ func (e *edgeHandler) Start() error {
 
 	if e.isRemoteShim() {
 		klog.Infof("init remote shim client")
-		for i := 0; i < shimConnectedRetryTime; i++ {
-			e.shimClient = clustershim.NewRemoteShimClient(e.conf.ClusterName, e.conf.RemoteShimAddr)
-			if e.shimClient != nil {
-				break
-			}
-			time.Sleep(shimConnectedRetryDuration)
-		}
+		e.shimClient = clustershim.NewRemoteShimClient(e.conf.ClusterName, e.conf.RemoteShimAddr)
 	} else if !e.isRoot() {
 		klog.Infof("init local shim client")
 		e.shimClient = clustershim.NewlocalShimClient(e.conf)

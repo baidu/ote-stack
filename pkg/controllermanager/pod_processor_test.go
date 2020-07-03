@@ -36,6 +36,7 @@ import (
 
 var (
 	podGroup = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	podKind  = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"}
 )
 
 func newPodUpdateAction(namespace string, pod *corev1.Pod) kubetesting.UpdateActionImpl {
@@ -54,12 +55,18 @@ func newPodDeleteAction(namespace string, name string) kubetesting.DeleteActionI
 	return kubetesting.NewDeleteAction(podGroup, namespace, name)
 }
 
+func newPodListAction(ops metav1.ListOptions) kubetesting.ListActionImpl {
+	return kubetesting.NewListAction(podGroup, podKind, "", ops)
+}
+
 func TestHandlePodReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
+	u.ctx.K8sClient = &kubernetes.Clientset{}
 
 	podUpdatesMap := &reporter.PodResourceStatus{
 		UpdateMap: make(map[string]*corev1.Pod),
 		DelMap:    make(map[string]*corev1.Pod),
+		FullList:  make([]string, 1),
 	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,22 +81,15 @@ func TestHandlePodReport(t *testing.T) {
 	}
 	podUpdatesMap.UpdateMap["test-namespace1/test-name1"] = pod
 	podUpdatesMap.DelMap["test-namespace1/test-name2"] = pod
+	podUpdatesMap.FullList = []string{"pod1"}
 
 	podUpdatesMapJSON, err := json.Marshal(*podUpdatesMap)
 	assert.Nil(t, err)
 
-	reportData := reporter.Report{
-		ResourceType: reporter.ResourceTypePod,
-		Body:         podUpdatesMapJSON,
-	}
-
-	podReportJSON, err := json.Marshal(reportData)
+	err = u.handlePodReport("cluster1", podUpdatesMapJSON)
 	assert.Nil(t, err)
 
-	err = u.handlePodReport(podReportJSON)
-	assert.Nil(t, err)
-
-	err = u.handlePodReport([]byte{1, 2, 3})
+	err = u.handlePodReport("cluster1", []byte{1, 2, 3})
 	assert.Error(t, err)
 }
 
@@ -363,5 +363,80 @@ func TestDeletePod(t *testing.T) {
 				assert.Equal(test.expectActions, mockClient.Actions())
 			}
 		})
+	}
+}
+
+func TestHandlePodFullList(t *testing.T) {
+	fullList := []string{"pod1"}
+
+	ops := metav1.ListOptions{
+		LabelSelector: "ote-cluster=c1",
+	}
+
+	cmPodList := &corev1.PodList{}
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "pod1-c1",
+			Labels: map[string]string{reporter.ClusterLabel: "c1"},
+		},
+	}
+	cmPodList.Items = append(cmPodList.Items, pod)
+
+	cmPodList2 := &corev1.PodList{}
+	pod = corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "pod1-c2",
+			Labels: map[string]string{reporter.ClusterLabel: "c1"},
+		},
+	}
+	cmPodList2.Items = append(cmPodList.Items, pod)
+
+	tests := []struct {
+		name          string
+		clusterName   string
+		edgePodList   []string
+		podList       *corev1.PodList
+		expectActions []kubetesting.Action
+		expectErr     bool
+	}{
+		{
+			name:        "success to handle full list's pod",
+			clusterName: "c1",
+			edgePodList: fullList,
+			podList:     cmPodList,
+			expectActions: []kubetesting.Action{
+				newPodListAction(ops),
+			},
+			expectErr: false,
+		},
+		{
+			name:        "A error occurs when handles a full list pod",
+			clusterName: "c1",
+			edgePodList: fullList,
+			podList:     cmPodList2,
+			expectActions: []kubetesting.Action{
+				newPodListAction(ops),
+				newPodDeleteAction("", "pod1"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		mockClient := &kubernetes.Clientset{}
+		mockClient.AddReactor("list", "pods", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			return true, test.podList, nil
+		})
+
+		u := NewUpstreamProcessor(&K8sContext{})
+		u.ctx.K8sClient = mockClient
+
+		u.handlePodFullList(test.clusterName, test.edgePodList)
+
+		if test.expectErr {
+			assert.NotEqual(t, test.expectActions, mockClient.Actions())
+		} else {
+			assert.Equal(t, test.expectActions, mockClient.Actions())
+		}
 	}
 }

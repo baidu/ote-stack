@@ -63,8 +63,9 @@ func (f *fixture) newPodReporter() *PodReporter {
 			ClusterName: func() string {
 				return clusterName
 			},
-			SyncChan: make(chan clustermessage.ClusterMessage),
-			StopChan: make(chan struct{}),
+			SyncChan:            make(chan clustermessage.ClusterMessage),
+			StopChan:            make(chan struct{}),
+			IsLightweightReport: true,
 		},
 		InformerFactory: k8sI,
 	}
@@ -191,4 +192,17 @@ func TestResetPodSpecParameter(t *testing.T) {
 
 	assert.NotNil(t, pod.Labels)
 	assert.NotNil(t, pod.Labels[EdgeNodeName])
+}
+
+func TestSetFullListMap(t *testing.T) {
+	f := newFixture(t)
+	podReporter := f.newPodReporter()
+
+	list := []string{
+		"pod1", "pod2",
+	}
+
+	podReporter.SetFullListMap(list)
+
+	assert.Equal(t, list, podReporter.updatedPodsMap.FullList)
 }

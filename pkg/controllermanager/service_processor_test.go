@@ -36,6 +36,7 @@ import (
 
 var (
 	serviceGroup = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
+	serviceKind  = schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Service"}
 )
 
 func newServiceGetAction(name string) kubetesting.GetActionImpl {
@@ -54,6 +55,10 @@ func newServiceDeleteAction(name string) kubetesting.DeleteActionImpl {
 	return kubetesting.NewDeleteAction(serviceGroup, "", name)
 }
 
+func newServiceListAction(ops metav1.ListOptions) kubetesting.ListActionImpl {
+	return kubetesting.NewListAction(serviceGroup, serviceKind, "", ops)
+}
+
 func NewService(name string,
 	clusterLabel string, edgeVersion string, resourceVersion string) *corev1.Service {
 	service := &corev1.Service{
@@ -69,32 +74,27 @@ func NewService(name string,
 
 func TestHandleServiceReport(t *testing.T) {
 	u := NewUpstreamProcessor(&K8sContext{})
+	u.ctx.K8sClient = &kubernetes.Clientset{}
 
 	serviceUpdateMap := &reporter.ServiceResourceStatus{
 		UpdateMap: make(map[string]*corev1.Service),
 		DelMap:    make(map[string]*corev1.Service),
+		FullList:  make([]string, 1),
 	}
 
 	service := NewService("test-name1", "cluster1", "", "1")
 
 	serviceUpdateMap.UpdateMap["test-namespace1/test-name1"] = service
 	serviceUpdateMap.DelMap["test-namespace1/test-name2"] = service
+	serviceUpdateMap.FullList = []string{"svc1"}
 
 	serviceJson, err := json.Marshal(serviceUpdateMap)
 	assert.Nil(t, err)
 
-	serviceReport := reporter.Report{
-		ResourceType: reporter.ResourceTypeService,
-		Body:         serviceJson,
-	}
-
-	reportJson, err := json.Marshal(serviceReport)
+	err = u.handleServiceReport("cluster1", serviceJson)
 	assert.Nil(t, err)
 
-	err = u.handleServiceReport(reportJson)
-	assert.Nil(t, err)
-
-	err = u.handleServiceReport([]byte{1})
+	err = u.handleServiceReport("cluster1", []byte{1})
 	assert.NotNil(t, err)
 }
 
@@ -238,5 +238,70 @@ func TestDeleteService(t *testing.T) {
 				assert.Equal(test.expectActions, mockClient.Actions())
 			}
 		})
+	}
+}
+
+func TestHandleServiceFullList(t *testing.T) {
+	fullList := []string{"svc1"}
+
+	ops := metav1.ListOptions{
+		LabelSelector: "ote-cluster=c1",
+	}
+
+	cmServiceList := &corev1.ServiceList{}
+	service := NewService("svc1-c1", "c1", "", "")
+	cmServiceList.Items = append(cmServiceList.Items, *service)
+
+	cmServiceList2 := &corev1.ServiceList{}
+	service = NewService("svc1-c2", "c1", "", "")
+	cmServiceList2.Items = append(cmServiceList2.Items, *service)
+
+	tests := []struct {
+		name            string
+		clusterName     string
+		edgeServiceList []string
+		serviceList     *corev1.ServiceList
+		expectActions   []kubetesting.Action
+		expectErr       bool
+	}{
+		{
+			name:            "success to handle full list's service",
+			clusterName:     "c1",
+			edgeServiceList: fullList,
+			serviceList:     cmServiceList,
+			expectActions: []kubetesting.Action{
+				newServiceListAction(ops),
+			},
+			expectErr: false,
+		},
+		{
+			name:            "A error occurs when handles a full list service",
+			clusterName:     "c1",
+			edgeServiceList: fullList,
+			serviceList:     cmServiceList2,
+			expectActions: []kubetesting.Action{
+				newServiceListAction(ops),
+				newServiceDeleteAction("svc1"),
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		mockClient := &kubernetes.Clientset{}
+		mockClient.AddReactor("list", "services", func(action kubetesting.Action) (bool, runtime.Object, error) {
+			return true, test.serviceList, nil
+		})
+
+		u := NewUpstreamProcessor(&K8sContext{})
+		u.ctx.K8sClient = mockClient
+
+		u.handleServiceFullList(test.clusterName, test.edgeServiceList)
+
+		if test.expectErr {
+			assert.NotEqual(t, test.expectActions, mockClient.Actions())
+		} else {
+			assert.Equal(t, test.expectActions, mockClient.Actions())
+		}
 	}
 }

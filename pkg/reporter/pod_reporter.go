@@ -22,6 +22,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
@@ -55,6 +56,7 @@ func newPodReporter(ctx *ReporterContext) (*PodReporter, error) {
 		updatedPodsMap: &PodResourceStatus{
 			UpdateMap: make(map[string]*corev1.Pod),
 			DelMap:    make(map[string]*corev1.Pod),
+			FullList:  make([]string, 0),
 		},
 		updatedPodsRWMutex: &sync.RWMutex{},
 		SyncChan:           ctx.SyncChan,
@@ -74,6 +76,8 @@ func newPodReporter(ctx *ReporterContext) (*PodReporter, error) {
 		},
 		DeleteFunc: podReporter.deletePod,
 	})
+
+	go podReporter.reportFullListPod(ctx)
 
 	return podReporter, nil
 }
@@ -95,8 +99,8 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	pr.updatedPodsRWMutex.Lock()
 	defer pr.updatedPodsRWMutex.Unlock()
 
-	// check map length, empty UpdateMap and DelMap don't need to send pod reports
-	if len(pr.updatedPodsMap.UpdateMap) == 0 && len(pr.updatedPodsMap.DelMap) == 0 {
+	// check map length, empty UpdateMap, DelMap and FullList don't need to send pod reports
+	if len(pr.updatedPodsMap.UpdateMap) == 0 && len(pr.updatedPodsMap.DelMap) == 0 && len(pr.updatedPodsMap.FullList) == 0 {
 		return
 	}
 
@@ -137,6 +141,7 @@ func (pr *PodReporter) sendClusterMessageToSyncChan() {
 	// clean up the map
 	pr.updatedPodsMap.DelMap = make(map[string]*corev1.Pod)
 	pr.updatedPodsMap.UpdateMap = make(map[string]*corev1.Pod)
+	pr.updatedPodsMap.FullList = make([]string, 0)
 }
 
 // SetUpdateMap adds pod objects to UpdateMap.
@@ -156,6 +161,13 @@ func (pr *PodReporter) SetDelMap(name string, pod *corev1.Pod) {
 		delete(pr.updatedPodsMap.UpdateMap, name)
 	}
 	pr.updatedPodsMap.DelMap[name] = pod
+}
+
+func (pr *PodReporter) SetFullListMap(podList []string) {
+	pr.updatedPodsRWMutex.Lock()
+	defer pr.updatedPodsRWMutex.Unlock()
+
+	pr.updatedPodsMap.FullList = podList
 }
 
 func startPodReporter(ctx *ReporterContext) error {
@@ -182,6 +194,10 @@ func (pr *PodReporter) handlePod(obj interface{}) {
 	pr.resetPodSpecParameter(pod)
 
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
+
+	if pr.ctx.IsLightweightReport {
+		pod = pr.lightWeightPod(pod)
+	}
 
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {
@@ -212,6 +228,10 @@ func (pr *PodReporter) deletePod(obj interface{}) {
 
 	addLabelToResource(&pod.ObjectMeta, pr.ctx)
 
+	if pr.ctx.IsLightweightReport {
+		pod = pr.lightWeightPod(pod)
+	}
+
 	key, err := cache.MetaNamespaceKeyFunc(pod)
 	if err != nil {
 		klog.Errorf("Failed to get map key: %v", err)
@@ -219,4 +239,38 @@ func (pr *PodReporter) deletePod(obj interface{}) {
 	}
 
 	pr.SetDelMap(key, pod)
+}
+
+// lightWeightPod crops the content of the pod
+func (pr *PodReporter) lightWeightPod(pod *corev1.Pod) *corev1.Pod {
+	return &corev1.Pod{
+		TypeMeta: pod.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			Labels:    pod.Labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers:  pod.Spec.Containers,
+			NodeName:    pod.Spec.NodeName,
+			Volumes:     pod.Spec.Volumes,
+			Tolerations: pod.Spec.Tolerations,
+		},
+		Status: corev1.PodStatus{
+			Phase:             pod.Status.Phase,
+			ContainerStatuses: pod.Status.ContainerStatuses,
+		},
+	}
+}
+
+// reportFullListPod report all pods list when starts pod reporter.
+func (pr *PodReporter) reportFullListPod(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Pods().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	podList := ctx.InformerFactory.Core().V1().Pods().Informer().GetIndexer().ListKeys()
+
+	pr.SetFullListMap(podList)
 }

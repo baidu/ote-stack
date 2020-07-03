@@ -167,6 +167,7 @@ func Run() error {
 			"kube-system",
 			oteRootClusterControllerName,
 			k8sClient.CoreV1(),
+			k8sClient.CoordinationV1(),
 			resourcelock.ResourceLockConfig{
 				Identity: id,
 				// add event recorder for debug

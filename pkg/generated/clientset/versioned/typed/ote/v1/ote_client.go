@@ -21,7 +21,6 @@ package v1
 import (
 	v1 "github.com/baidu/ote-stack/pkg/apis/ote/v1"
 	"github.com/baidu/ote-stack/pkg/generated/clientset/versioned/scheme"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	rest "k8s.io/client-go/rest"
 )
 
@@ -29,6 +28,7 @@ type OteV1Interface interface {
 	RESTClient() rest.Interface
 	ClustersGetter
 	ClusterControllersGetter
+	EdgeNodesGetter
 }
 
 // OteV1Client is used to interact with features provided by the ote.baidu.com group.
@@ -42,6 +42,10 @@ func (c *OteV1Client) Clusters(namespace string) ClusterInterface {
 
 func (c *OteV1Client) ClusterControllers(namespace string) ClusterControllerInterface {
 	return newClusterControllers(c, namespace)
+}
+
+func (c *OteV1Client) EdgeNodes(namespace string) EdgeNodeInterface {
+	return newEdgeNodes(c, namespace)
 }
 
 // NewForConfig creates a new OteV1Client for the given config.
@@ -76,7 +80,7 @@ func setConfigDefaults(config *rest.Config) error {
 	gv := v1.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()

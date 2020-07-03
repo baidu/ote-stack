@@ -28,6 +28,8 @@ type Interface interface {
 	Clusters() ClusterInformer
 	// ClusterControllers returns a ClusterControllerInformer.
 	ClusterControllers() ClusterControllerInformer
+	// EdgeNodes returns a EdgeNodeInformer.
+	EdgeNodes() EdgeNodeInformer
 }
 
 type version struct {
@@ -49,4 +51,9 @@ func (v *version) Clusters() ClusterInformer {
 // ClusterControllers returns a ClusterControllerInformer.
 func (v *version) ClusterControllers() ClusterControllerInformer {
 	return &clusterControllerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// EdgeNodes returns a EdgeNodeInformer.
+func (v *version) EdgeNodes() EdgeNodeInformer {
+	return &edgeNodeInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

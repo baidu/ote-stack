@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -59,6 +60,8 @@ func startServiceReporter(ctx *ReporterContext) error {
 		DeleteFunc: serviceReporter.deleteService,
 	})
 
+	go serviceReporter.reportFullListService(ctx)
+
 	return nil
 }
 
@@ -72,6 +75,10 @@ func (sr *ServiceReporter) handleService(obj interface{}) {
 	klog.V(3).Infof("handle Service: %s", service.Name)
 
 	addLabelToResource(&service.ObjectMeta, sr.ctx)
+
+	if sr.ctx.IsLightweightReport {
+		service = sr.lightWeightService(service)
+	}
 
 	// generates unique key for service.
 	key, err := cache.MetaNamespaceKeyFunc(service)
@@ -99,6 +106,10 @@ func (sr *ServiceReporter) deleteService(obj interface{}) {
 	klog.V(3).Infof("Service: %s deleted.", service.Name)
 
 	addLabelToResource(&service.ObjectMeta, sr.ctx)
+
+	if sr.ctx.IsLightweightReport {
+		service = sr.lightWeightService(service)
+	}
 
 	// generates unique key for service.
 	key, err := cache.MetaNamespaceKeyFunc(service)
@@ -148,4 +159,36 @@ func (sr *ServiceResourceStatus) serializeMapToReporters() (Reports, error) {
 	}
 
 	return data, nil
+}
+
+// lightWeightService crops the content of the service
+func (sr *ServiceReporter) lightWeightService(service *corev1.Service) *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: service.TypeMeta,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      service.Name,
+			Namespace: service.Namespace,
+			Labels:    service.Labels,
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: service.Spec.ClusterIP,
+			Ports:     service.Spec.Ports,
+		},
+	}
+}
+
+// reportFullListService report all service list when starts service reporter.
+func (sr *ServiceReporter) reportFullListService(ctx *ReporterContext) {
+	if ok := cache.WaitForCacheSync(ctx.StopChan, ctx.InformerFactory.Core().V1().Services().Informer().HasSynced); !ok {
+		klog.Errorf("failed to wait for caches to sync")
+		return
+	}
+
+	servieList := ctx.InformerFactory.Core().V1().Services().Informer().GetIndexer().ListKeys()
+
+	serviceMap := &ServiceResourceStatus{
+		FullList: servieList,
+	}
+
+	go sr.sendToSyncChan(serviceMap)
 }
