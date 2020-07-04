@@ -46,7 +46,7 @@ spec:
       - name: _HARBOR_SECRET_NAME_
       containers:
       - name: ote-cm
-        image: _HARBOR_IMAGE_ADDR_/ote-cm:2.1
+        image: _HARBOR_IMAGE_ADDR_/ote-cm:3.0
         imagePullPolicy: IfNotPresent
         args:
         - "--kube-config=/kube/config"

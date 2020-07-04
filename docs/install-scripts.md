@@ -12,7 +12,7 @@ In the **deployments** directory, we have these files and subdirectories.
 
 ## 0. Prerequisite
 
-- You should have at least one k8s cluster in which container network is healthy (coredns works).
+- You should have at least one k8s or k3s cluster in which container network is healthy (coredns works).If you want to enable edge autonomy feature in your cluster, you should deploy EdgeHub according to [edge-autonomy.md](./docs/edge-autonomy.md)
 
 - Kubectl works with default kubeconfig in the /root/.kube/ directory
 
@@ -21,7 +21,7 @@ In the **deployments** directory, we have these files and subdirectories.
 
 ## 1. Installment
 
-- Chang config file interface_conf according to the comment
+- Chang config file interface_conf according to the comment. If you want to enable edge autonomy feature, you should set EDGE_AUTONOMY_ENABLE to be true
 
 - Create actual yml
 
