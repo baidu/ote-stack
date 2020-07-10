@@ -19,6 +19,15 @@ function echo_info {
     DATE_N=`date "+%Y-%m-%d %H:%M:%S"`
     echo -e "\E[1;32m ${DATE_N} [INFO] $input \E[0m"
 }
+# load configs
+function load_interface_conf {
+    if [ -f "$WORK_DIR/interface_conf" ]; then
+        source $WORK_DIR/interface_conf
+        echo_info "load interface_conf success"
+    else
+        echo_error "no interface_conf, please check" && exit 1
+    fi
+}
 
 function start {
     # 1) monitor/alarm
@@ -48,7 +57,6 @@ function start {
 
     kubectl apply -f kube-apiserver/ns.yml -s $kube_apiserver_host_ip:$kube_apiserver_port
     kubectl apply -f kube-apiserver/cc-crd.yml -s $kube_apiserver_host_ip:$kube_apiserver_port
-    kubectl apply -f kube-apiserver/edgenode-crd.yml
     kubectl apply -f tiller/tiller.yml
     kubectl apply -f tiller-proxy/tiller-proxy.yml
     kubectl create configmap edge-kube-config -n kube-system --from-file=/root/.kube/config
@@ -62,7 +70,11 @@ function start {
     kubectl apply -f mysql/mysql.yml
     kubectl apply -f open-api/open-api.yml
     kubectl apply -f web-frontend-nginx/web-frontend-nginx.yml
-    kubectl apply -f edge-controller/edge-controller.yml
+
+    if [ "$EDGE_AUTONOMY_ENABLE" = "true" ]; then
+        kubectl apply -f kube-apiserver/edgenode-crd.yml
+        kubectl apply -f edge-controller/edge-controller.yml
+    fi
 
     echo_info "kubectl apply all yml success..."
 }
@@ -96,12 +108,16 @@ function stop {
     kubectl delete -f mysql/mysql.yml
     kubectl delete -f open-api/open-api.yml
     kubectl delete -f web-frontend-nginx/web-frontend-nginx.yml
-    kubectl delete -f edge-controller/edge-controller.yml
+
+    if [ "$EDGE_AUTONOMY_ENABLE" = "true" ]; then
+        kubectl delete -f edge-controller/edge-controller.yml
+    fi
+
     kubectl delete namespace monitor
     echo_info "kubectl delete all yml success..."
 }
 
-cd $WORK_DIR && echo_info "WORK_DIR=$WORK_DIR"
+cd $WORK_DIR && echo_info "WORK_DIR=$WORK_DIR" && load_interface_conf
 
 case $1 in
 start)

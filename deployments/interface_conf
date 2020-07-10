@@ -23,3 +23,6 @@ repository_domain=ote-harbor.baidu.com
 
 # docker root dir
 docker_root_dir=/var/lib/docker
+
+# edge autonomy enable
+EDGE_AUTONOMY_ENABLE=false
